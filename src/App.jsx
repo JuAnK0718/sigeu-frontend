@@ -11,9 +11,34 @@ function App() {
   const API = 'https://sigeu-backend-production.up.railway.app/api'
 
   useEffect(() => {
+    let intervalId;
+
     if (view === 'DASHBOARD' && user?.role !== 'CITIZEN') {
-      fetch(`${API}/emergencies?target=${user.role}`).then(res => res.json()).then(setEmergencies)
+      const fetchEmergencies = async () => {
+        try {
+          const res = await fetch(`${API}/emergencies?target=${user.role}&t=${Date.now()}`, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache'
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setEmergencies(data);
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      };
+
+      fetchEmergencies();
+      intervalId = setInterval(fetchEmergencies, 3000);
     }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [view, user])
 
   const handleLogin = async (e) => {
@@ -43,7 +68,7 @@ function App() {
         <div className="w-full max-w-md bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl">
           <div className="text-center mb-8">
             <div className="bg-red-600 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"><AlertTriangle /></div>
-            <h1 className="text-4xl font-black italic italic tracking-tighter">SIGEU</h1>
+            <h1 className="text-4xl font-black italic tracking-tighter">SIGEU</h1>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="relative">
