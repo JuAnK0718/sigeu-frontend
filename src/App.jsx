@@ -25,7 +25,7 @@ function App() {
     return saved ? JSON.parse(saved) : null
   })
   
-  // Vistas disponibles: 'LOGIN', 'REGISTER', 'RECOVER', 'DASHBOARD'
+  
   const [view, setView] = useState(() => {
     return localStorage.getItem('sigeu_user') ? 'DASHBOARD' : 'LOGIN'
   })
@@ -37,7 +37,7 @@ function App() {
   
   const [loginRole, setLoginRole] = useState('CITIZEN')
   
-  // Mensajes de estado para los formularios
+  
   const [authError, setAuthError] = useState('')
   const [authSuccess, setAuthSuccess] = useState('')
   const [formErrors, setFormErrors] = useState({});
@@ -54,7 +54,7 @@ function App() {
   const API = 'https://sigeu-backend-production.up.railway.app/api'
   const AI_SERVICE_URL = 'https://sigeu-ai-service-production.up.railway.app/analizar'
 
-  // Limpiar mensajes al cambiar de vista
+  
   useEffect(() => {
     setAuthError('')
     setAuthSuccess('')
@@ -115,7 +115,6 @@ function App() {
     }
   }
 
-  // --- NUEVA FUNCIÓN: REGISTRO REAL ---
   const handleRegister = async (e) => {
     e.preventDefault()
     setAuthError('')
@@ -135,7 +134,6 @@ function App() {
     }
   }
 
-  // --- NUEVA FUNCIÓN: RECUPERACIÓN REAL ---
   const handleRecover = async (e) => {
     e.preventDefault()
     setAuthError('')
@@ -246,7 +244,6 @@ function App() {
     }
   }
 
-  // --- RENDERIZADO DE LAS VISTAS DE AUTENTICACIÓN ---
   if (view === 'LOGIN' || view === 'REGISTER' || view === 'RECOVER') {
     return (
       <>
