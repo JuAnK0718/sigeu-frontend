@@ -116,11 +116,11 @@ function App() {
         const seleccionCiudadano = loginRole === 'CITIZEN';
 
         if (seleccionCiudadano && !esCiudadanoBD) {
-          setAuthError('Estas credenciales son de Entidad. Selecciona 🏛️ Entidad arriba.');
+          setAuthError('Estas credenciales son de Entidad. Selecciona Entidad.');
           return;
         }
         if (!seleccionCiudadano && esCiudadanoBD) {
-          setAuthError('Estas credenciales son de Ciudadano. Selecciona 👤 Ciudadano arriba.');
+          setAuthError('Estas credenciales son de Ciudadano. Selecciona Ciudadano.');
           return;
         }
 
