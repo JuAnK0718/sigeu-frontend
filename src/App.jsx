@@ -197,7 +197,7 @@ function App() {
 
     switch (error.code) {
       case GEO_ERROR.PERMISSION_DENIED:
-        return "El navegador bloqueo la ubicacion. En iPhone revisa Ajustes > Safari > Ubicacion, o Ajustes > Privacidad y seguridad > Localizacion.";
+        return "";
       case GEO_ERROR.POSITION_UNAVAILABLE:
         return "El iPhone no pudo calcular la ubicacion. Activa Localizacion y prueba con buena senal GPS o WiFi.";
       case GEO_ERROR.TIMEOUT:
@@ -240,7 +240,8 @@ function App() {
         location: `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`
       }));
     } catch (error) {
-      alert(getLocationErrorMessage(error));
+      const message = getLocationErrorMessage(error);
+      if (message) alert(message);
     } finally {
       setIsLocating(false);
     }
