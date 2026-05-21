@@ -72,6 +72,8 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [imagePreview, setImagePreview] = useState(null)
   const [selectedImage, setSelectedImage] = useState(null)
+  const [appNotice, setAppNotice] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   const API = 'https://sigeu-backend-production.up.railway.app/api'
   const AI_SERVICE_URL = 'https://sigeu-ai-service-production.up.railway.app/analizar'
@@ -179,19 +181,33 @@ function App() {
     setUser(null); localStorage.removeItem('sigeu_user'); setView('LOGIN'); setImagePreview(null);
   }
 
+  const showAppNotice = (message, type = 'warning') => {
+    const id = Date.now();
+    setAppNotice({ id, message, type });
+    setTimeout(() => {
+      setAppNotice(current => current?.id === id ? null : current);
+    }, 4500);
+  }
+
   const handleSend = async (e) => {
     e.preventDefault()
     if (selectedEntities.length === 0) return;
     let enviosExitosos = 0;
-    for (const entidad of selectedEntities) {
-      const res = await fetch(`${API}/emergencies`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...emergencyForm, targetEntity: entidad }) 
-      });
-      if (res.ok) enviosExitosos++;
+    try {
+      for (const entidad of selectedEntities) {
+        const res = await fetch(`${API}/emergencies`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...emergencyForm, targetEntity: entidad }) 
+        });
+        if (res.ok) enviosExitosos++;
+      }
+    } catch {
+      showAppNotice('No se pudo conectar con el servidor para enviar el reporte.', 'error');
+      return;
     }
     if (enviosExitosos > 0) { 
-      alert(`¡Éxito! Reporte enviado a ${enviosExitosos} entidad(es).`); 
       setEmergencyForm({ title: '', description: '', location: '', type: 'ACCIDENT', image: '' }); setSelectedEntities(['POLICIA']); setImagePreview(null)
+    } else {
+      showAppNotice('No se pudo enviar el reporte. Intentalo nuevamente.', 'error');
     }
   }
 
@@ -202,10 +218,26 @@ function App() {
     if (res.ok) setEmergencies(emergencies.map(em => em.id === id ? { ...em, status: newStatus } : em))
   }
 
-  const deleteEmergency = async (id) => {
-    if(!window.confirm("¿Confirmar eliminación?")) return;
-    const res = await fetch(`${API}/emergencies/${id}`, { method: 'DELETE' })
-    if (res.ok) setEmergencies(emergencies.filter(em => em.id !== id))
+  const requestDeleteEmergency = (emergency) => {
+    setDeleteTarget(emergency);
+  }
+
+  const deleteEmergency = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    let res;
+    try {
+      res = await fetch(`${API}/emergencies/${id}`, { method: 'DELETE' })
+    } catch {
+      showAppNotice('No se pudo conectar con el servidor para borrar el incidente.', 'error');
+      return;
+    }
+    if (res.ok) {
+      setEmergencies(emergencies.filter(em => em.id !== id))
+      setDeleteTarget(null)
+    } else {
+      showAppNotice('No se pudo borrar el incidente. Intentalo nuevamente.', 'error');
+    }
   }
 
   const GEO_ERROR = { PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 }
@@ -237,12 +269,12 @@ function App() {
 
   const handleGetLocation = async () => {
     if (!window.isSecureContext) {
-      alert(getLocationErrorMessage());
+      showAppNotice(getLocationErrorMessage(), 'warning');
       return;
     }
 
     if (!navigator.geolocation) {
-      alert("Este navegador no permite obtener ubicacion automatica.");
+      showAppNotice("Este navegador no permite obtener ubicacion automatica.", 'warning');
       return;
     }
 
@@ -263,7 +295,7 @@ function App() {
       }));
     } catch (error) {
       const message = getLocationErrorMessage(error);
-      if (message) alert(message);
+      if (message) showAppNotice(message, 'warning');
     } finally {
       setIsLocating(false);
     }
@@ -780,7 +812,7 @@ function App() {
                         <button onClick={() => updateStatus(em.id, 'RESOLVED')} className="bg-emerald-600 text-white p-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black shadow-md hover:bg-emerald-700 transition-all active:scale-95">RESOLVER</button>
                       )}
                       
-                      <button onClick={() => deleteEmergency(em.id)} className="bg-white border border-slate-200 text-slate-400 p-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black hover:bg-red-50 hover:text-red-600 transition-all active:scale-95">BORRAR</button>
+                      <button onClick={() => requestDeleteEmergency(em)} className="bg-white border border-slate-200 text-slate-400 p-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black hover:bg-red-50 hover:text-red-600 transition-all active:scale-95">BORRAR</button>
                 </div>
               </div>
             );
@@ -792,6 +824,49 @@ function App() {
       </main>
       
       
+
+      {appNotice && (
+        <div className="fixed right-4 top-24 z-[120] max-w-sm animate-fade-in-up rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-900/20">
+          <div className="flex items-start gap-3">
+            <div className={["mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white", appNotice.type === 'error' ? "bg-red-600" : "bg-amber-500"].join(" ")}>
+              <AlertTriangle size={18}/>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black uppercase text-slate-500">SIGEU</p>
+              <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800">{appNotice.message}</p>
+            </div>
+            <button type="button" onClick={() => setAppNotice(null)} className="rounded-lg p-1 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700">
+              <X size={16}/>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4 animate-fade-in-up" onClick={() => setDeleteTarget(null)}>
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                <AlertTriangle size={24}/>
+              </div>
+              <div>
+                <h3 className="text-xl font-black italic text-slate-900">Eliminar incidente</h3>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+                  Esta accion borrara el reporte "{deleteTarget.title}". Puedes cancelar si aun necesitas conservarlo.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button type="button" onClick={deleteEmergency} className="rounded-2xl bg-red-600 p-4 text-sm font-black uppercase text-white shadow-lg shadow-red-100 transition-all hover:bg-red-700 active:scale-95">
+                Borrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedImage && (
         <div className="fixed inset-0 bg-slate-950/90 z-[100] flex items-center justify-center p-4 animate-fade-in-up" onClick={() => setSelectedImage(null)}>
