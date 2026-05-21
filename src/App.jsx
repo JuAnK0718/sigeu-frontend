@@ -296,15 +296,68 @@ function App() {
     return (
       <>
         <style>{styles}</style>
-        <div className="min-h-screen bg-[#020610] flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
+        <div className="min-h-screen bg-[#020610] relative overflow-hidden font-sans text-white">
           <div className="absolute top-1/2 left-0 w-[600px] h-[600px] bg-blue-600 rounded-full mix-blend-screen blur-[120px] -translate-y-1/2 -translate-x-1/3 animate-siren-blue pointer-events-none opacity-60"></div>
           <div className="absolute top-1/2 right-0 w-[600px] h-[600px] bg-red-600 rounded-full mix-blend-screen blur-[120px] -translate-y-1/2 translate-x-1/3 animate-siren-red pointer-events-none opacity-60"></div>
-          
-          <div className="w-full max-w-md bg-[#091120]/80 backdrop-blur-xl rounded-[2.5rem] p-10 z-10 animate-fade-in-up border border-white/5 shadow-2xl text-center shadow-black/40 mb-8">
-            <div className="bg-[#ff0000] w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-[0_0_25px_rgba(255,0,0,0.5)]"><span className="text-4xl font-black italic text-white">!</span></div>
-            <h1 className="text-5xl font-black italic mb-1 tracking-tighter text-white">SIGEU</h1>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_28%),linear-gradient(180deg,rgba(2,6,16,0)_0%,rgba(2,6,16,0.95)_100%)] pointer-events-none"></div>
+
+          <nav className="relative z-10 max-w-7xl mx-auto px-5 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-[#ff0000] w-11 h-11 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(255,0,0,0.6)]">
+                <span className="text-3xl font-black italic text-white">!</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-black italic leading-none">SIGEU</h1>
+                <p className="text-[10px] uppercase tracking-[.28em] text-cyan-200/80 font-bold">Sistema de Gestion</p>
+              </div>
+            </div>
+            <div className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-200/85">
+              <span>Plataforma</span>
+              <span>Alertas IA</span>
+              <span>Entidades</span>
+              <span>Soporte</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-3">
+              <button type="button" onClick={() => setView('LOGIN')} className="px-4 py-2 text-sm font-bold text-slate-200 hover:text-white transition-all">Iniciar sesion</button>
+              <button type="button" onClick={() => setView('REGISTER')} className="px-5 py-2 rounded-xl border border-white/25 text-sm font-bold hover:bg-white/10 transition-all">Inscribete</button>
+            </div>
+          </nav>
+
+          <main className="relative z-10 max-w-7xl mx-auto px-5 pb-10 pt-4 md:pt-10 grid lg:grid-cols-[1.1fr_460px] gap-10 items-center min-h-[calc(100vh-92px)]">
+            <section className="animate-fade-in-up text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 text-cyan-100 text-xs font-black uppercase mb-7">
+                <AlertTriangle size={14}/> Respuesta ciudadana en tiempo real
+              </div>
+              <h2 className="text-4xl md:text-6xl xl:text-7xl font-black leading-[1.02] tracking-normal max-w-4xl">
+                Reporta emergencias y coordina ayuda con SIGEU IA.
+              </h2>
+              <p className="mt-6 text-base md:text-xl text-slate-200/80 font-medium leading-relaxed max-w-2xl mx-auto lg:mx-0">
+                Una plataforma para que ciudadanos, policia, bomberos y hospitales gestionen incidentes desde una sola central.
+              </p>
+              <div className="mt-9 grid sm:grid-cols-3 gap-3 max-w-2xl mx-auto lg:mx-0">
+                <div className="border border-white/10 bg-white/[0.06] rounded-2xl p-4 text-left">
+                  <Shield size={22} className="text-cyan-300 mb-3"/>
+                  <p className="text-sm font-black">Triaje automatico</p>
+                  <p className="text-xs text-slate-300 mt-1">La IA ayuda a priorizar la escena.</p>
+                </div>
+                <div className="border border-white/10 bg-white/[0.06] rounded-2xl p-4 text-left">
+                  <MapPin size={22} className="text-cyan-300 mb-3"/>
+                  <p className="text-sm font-black">Ubicacion GPS</p>
+                  <p className="text-xs text-slate-300 mt-1">Coordenadas listas para operar.</p>
+                </div>
+                <div className="border border-white/10 bg-white/[0.06] rounded-2xl p-4 text-left">
+                  <Camera size={22} className="text-cyan-300 mb-3"/>
+                  <p className="text-sm font-black">Evidencia visual</p>
+                  <p className="text-xs text-slate-300 mt-1">Imagenes para cada entidad.</p>
+                </div>
+              </div>
+            </section>
+
+            <div className="w-full max-w-md mx-auto bg-[#091120]/90 backdrop-blur-xl rounded-[2rem] p-7 md:p-9 z-10 animate-fade-in-up border border-white/10 shadow-2xl text-center shadow-black/50">
+            <div className="bg-[#ff0000] w-14 h-14 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-[0_0_25px_rgba(255,0,0,0.5)]"><span className="text-4xl font-black italic text-white">!</span></div>
+            <h1 className="text-5xl font-black italic mb-1 tracking-normal text-white">SIGEU</h1>
             <p className="text-xs uppercase tracking-[.3em] opacity-80 mb-8 font-semibold text-cyan-200">
-              {view === 'LOGIN' ? 'Sistema de Gestión' : view === 'REGISTER' ? 'Nuevo Registro' : 'Recuperación'}
+              {view === 'LOGIN' ? 'Sistema de Gestion' : view === 'REGISTER' ? 'Nuevo Registro' : 'Recuperacion'}
             </p>
 
             {authError && <div className="text-red-400 text-xs font-bold bg-red-950/40 p-3 rounded-xl border border-red-900 mb-4">{authError}</div>}
@@ -313,16 +366,22 @@ function App() {
             {view === 'LOGIN' && (
               <>
                 <div className="flex gap-4 mb-8">
-                  <button type="button" onClick={() => setLoginRole('CITIZEN')} className={["flex-1 p-4 rounded-xl border transition-all text-base font-bold flex items-center justify-center gap-2", loginRole === 'CITIZEN' ? "border-cyan-400 bg-cyan-950 text-white shadow-md shadow-cyan-950" : "border-white/5 opacity-50 text-slate-400"].join(" ")}>👤 Ciudadano</button>
-                  <button type="button" onClick={() => setLoginRole('ENTITY')} className={["flex-1 p-4 rounded-xl border transition-all text-base font-bold flex items-center justify-center gap-2", loginRole === 'ENTITY' ? "border-cyan-400 bg-cyan-950 text-white shadow-md shadow-cyan-950" : "border-white/5 opacity-50 text-slate-400"].join(" ")}>🏛️ Entidad</button>
+                  <button type="button" onClick={() => setLoginRole('CITIZEN')} className={["flex-1 p-4 rounded-xl border transition-all text-base font-bold flex items-center justify-center gap-2", loginRole === 'CITIZEN' ? "border-cyan-400 bg-cyan-950 text-white shadow-md shadow-cyan-950" : "border-white/5 opacity-50 text-slate-400"].join(" ")}><User size={18}/> Ciudadano</button>
+                  <button type="button" onClick={() => setLoginRole('ENTITY')} className={["flex-1 p-4 rounded-xl border transition-all text-base font-bold flex items-center justify-center gap-2", loginRole === 'ENTITY' ? "border-cyan-400 bg-cyan-950 text-white shadow-md shadow-cyan-950" : "border-white/5 opacity-50 text-slate-400"].join(" ")}><Shield size={18}/> Entidad</button>
                 </div>
                 <form onSubmit={handleLogin} className="space-y-5">
-                  <input type="text" placeholder="Usuario" className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, username: e.target.value})} required />
-                  <input type="password" placeholder="Contraseña" className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+                  <div className="relative">
+                    <User size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"/>
+                    <input type="text" placeholder="Usuario" className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, username: e.target.value})} required />
+                  </div>
+                  <div className="relative">
+                    <Lock size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"/>
+                    <input type="password" placeholder="Contrasena" className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+                  </div>
                   <button type="submit" className="w-full h-16 bg-cyan-600 p-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-3 shadow-lg hover:bg-cyan-500 transform active:scale-95 transition-all shadow-cyan-950">
                     INGRESAR <ArrowRight size={22}/>
                   </button>
-                  <button type="button" onClick={() => setView('RECOVER')} className="text-cyan-400 text-sm hover:underline block mt-4 transition-all w-full text-center">¿Has olvidado la contraseña?</button>
+                  <button type="button" onClick={() => setView('RECOVER')} className="text-cyan-400 text-sm hover:underline block mt-4 transition-all w-full text-center">Olvidaste la contrasena?</button>
                   <div className="border-t border-white/5 mt-8 pt-8">
                     <button type="button" onClick={() => setView('REGISTER')} className="w-full h-14 border border-cyan-400 text-cyan-400 hover:bg-cyan-950 p-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transform active:scale-95 transition-all shadow-md">
                       Crear una cuenta
@@ -331,10 +390,9 @@ function App() {
                 </form>
                 <div className="mt-8 text-center px-2">
                   <p className="text-slate-400 text-xs font-medium leading-relaxed italic">
-                    <span className="text-cyan-400 font-bold">SIGEU IA:</span> Plataforma para el reporte ciudadano de incidentes. Utiliza inteligencia artificial para analizar la escena, realizar triaje automático y coordinar entidades de socorro.
+                    <span className="text-cyan-400 font-bold">SIGEU IA:</span> Reporte ciudadano con analisis visual, triaje automatico y coordinacion de entidades de socorro.
                   </p>
                 </div>
-                {/* ----------------------------------------------------------- */}
               </>
             )}
 
@@ -452,7 +510,6 @@ function App() {
               </form>
             )}
 
-            {/* --- VISTA DE RECUPERAR CONTRASEÑA --- */}
             {view === 'RECOVER' && (
               <form onSubmit={handleRecover} className="space-y-5">
                 <p className="text-slate-300 text-sm mb-4">Ingresa tu usuario y enviaremos una notificación al sistema para restablecer tu acceso.</p>
@@ -466,14 +523,8 @@ function App() {
               </form>
             )}
 
-            {/* --- MENSAJE DE PRESENTACIÓN SIGEU IA --- */}
-            <div className="...">
-              <p className="...">
-                <span className="...">SIGEU IA:</span> Plataforma para el reporte ciudadano...
-              </p>
-            </div>
-
           </div>
+          </main>
         </div>
       </>
     )
