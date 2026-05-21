@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText } from 'lucide-react'
+import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
+import { analyzeIncidentImage, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, loginUser, recoverUser, registerUser, updateEmergencyStatus } from './services/sigeuApi'
+import { formatEmergencyTime, getEmergencyPriority, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig, parseEmergencyCoordinates } from './utils/emergencies'
 
 const styles = `
   @keyframes siren-red {
@@ -18,64 +21,6 @@ const styles = `
   }
   .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
 `;
-
-const parseEmergencyCoordinates = (location) => {
-  const matches = String(location || '').match(/-?\d+(?:[.,]\d+)?/g);
-  if (!matches || matches.length < 2) return null;
-
-  const [lat, lng] = matches.slice(0, 2).map(value => Number(value.replace(',', '.')));
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
-
-  return { lat, lng };
-}
-
-const getIncidentMapEmbedUrl = ({ lat, lng }) => {
-  const margin = 0.006;
-  const bbox = `${lng - margin},${lat - margin},${lng + margin},${lat + margin}`;
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lng}`)}`;
-}
-
-const getIncidentMapUrl = ({ lat, lng }) => {
-  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
-}
-
-const getEmergencyPriority = (emergency, role) => {
-  const text = `${emergency.title || ''} ${emergency.description || ''} ${emergency.type || ''}`.toLowerCase();
-  const highByRole = {
-    POLICIA: ['arma', 'disparo', 'robo', 'asalto', 'violencia', 'secuestro', 'herido'],
-    BOMBEROS: ['incendio', 'fuego', 'humo', 'explosion', 'explosión', 'gas', 'atrapado'],
-    HOSPITAL: ['herido', 'sangre', 'ambulancia', 'inconsciente', 'grave', 'fractura', 'medico', 'médico']
-  };
-  const mediumWords = ['accidente', 'choque', 'emergencia', 'riesgo', 'auxilio'];
-  const highWords = highByRole[role] || ['emergencia', 'grave', 'herido'];
-
-  if (highWords.some(word => text.includes(word))) {
-    return { label: 'Alta', className: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' };
-  }
-  if (mediumWords.some(word => text.includes(word))) {
-    return { label: 'Media', className: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
-  }
-  return { label: 'Normal', className: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
-}
-
-const getStatusConfig = (status) => {
-  switch (status) {
-    case 'RESOLVED':
-      return { label: 'Resuelto', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
-    case 'IN_PROGRESS':
-      return { label: 'En atencion', className: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
-    default:
-      return { label: 'Nueva alerta', className: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' };
-  }
-}
-
-const formatEmergencyTime = (value) => {
-  if (!value) return 'Sin fecha';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Sin fecha';
-  return date.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
-}
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -114,24 +59,25 @@ function App() {
   const [detailTarget, setDetailTarget] = useState(null)
   const [entityFilter, setEntityFilter] = useState('ALL')
   const [entitySearch, setEntitySearch] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [isSendingReport, setIsSendingReport] = useState(false)
 
-  const API = 'https://sigeu-backend-production.up.railway.app/api'
-  const AI_SERVICE_URL = 'https://sigeu-ai-service-production.up.railway.app/analizar'
-
-  
-  useEffect(() => {
+  const clearAuthFeedback = () => {
     setAuthError('')
     setAuthSuccess('')
-  }, [view])
+  }
+
+  const goToView = (nextView) => {
+    clearAuthFeedback()
+    setView(nextView)
+  }
 
   useEffect(() => {
     let intervalId;
     if (view === 'DASHBOARD' && user?.role !== 'CITIZEN') {
       const fetchEmergencies = async () => {
         try {
-          const res = await fetch(`${API}/emergencies?target=${user.role}&t=${Date.now()}`, {
-            method: 'GET', cache: 'no-store', headers: { 'Cache-Control': 'no-cache' }
-          });
+          const res = await fetchEmergenciesByTarget(user.role);
           if (res.ok) {
             const data = await res.json();
             setEmergencies(data);
@@ -149,10 +95,9 @@ function App() {
   const handleLogin = async (e) => {
     e.preventDefault()
     setAuthError('')
+    setAuthLoading(true)
     try {
-      const res = await fetch(`${API}/auth/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginData)
-      })
+      const res = await loginUser(loginData)
       if (res.ok) { 
         const userData = await res.json()
         const esCiudadanoBD = userData.role === 'CITIZEN';
@@ -169,56 +114,60 @@ function App() {
 
         setUser(userData)
         localStorage.setItem('sigeu_user', JSON.stringify(userData))
-        setView('DASHBOARD') 
+        goToView('DASHBOARD') 
       } else {
         const errorText = await res.text()
         setAuthError(errorText || 'Error en las credenciales')
       }
-    } catch (err) {
+    } catch {
       setAuthError('Error de conexión con el servidor')
+    } finally {
+      setAuthLoading(false)
     }
   }
 
   const handleRegister = async (e) => {
     e.preventDefault()
     setAuthError('')
+    setAuthLoading(true)
     try {
-      const res = await fetch(`${API}/auth/register`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(registerData)
-      })
+      const res = await registerUser(registerData)
       if (res.ok) {
         setAuthSuccess('¡Cuenta creada con éxito! Ahora puedes iniciar sesión.')
-        setTimeout(() => setView('LOGIN'), 2000)
+        setTimeout(() => goToView('LOGIN'), 2000)
       } else {
         const errorText = await res.text()
         setAuthError(errorText || 'Error al crear la cuenta. El usuario podría ya existir.')
       }
-    } catch (err) {
+    } catch {
       setAuthError('Error de conexión con el servidor')
+    } finally {
+      setAuthLoading(false)
     }
   }
 
   const handleRecover = async (e) => {
     e.preventDefault()
     setAuthError('')
+    setAuthLoading(true)
     try {
       // Nota: En la vida real esto envía un correo. Aquí haremos que el backend reinicie la clave o mande un aviso.
-      const res = await fetch(`${API}/auth/recover`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(recoverData)
-      })
+      const res = await recoverUser(recoverData)
       if (res.ok) {
         setAuthSuccess('Instrucciones de recuperación enviadas. (Revisa tu base de datos o consola)')
       } else {
         const errorText = await res.text()
         setAuthError(errorText || 'Usuario no encontrado')
       }
-    } catch (err) {
+    } catch {
       setAuthError('Error de conexión con el servidor')
+    } finally {
+      setAuthLoading(false)
     }
   }
 
   const handleLogout = () => {
-    setUser(null); localStorage.removeItem('sigeu_user'); setView('LOGIN'); setImagePreview(null);
+    setUser(null); localStorage.removeItem('sigeu_user'); goToView('LOGIN'); setImagePreview(null);
   }
 
   const showAppNotice = (message, type = 'warning') => {
@@ -230,33 +179,45 @@ function App() {
 
   const handleSend = async (e) => {
     e.preventDefault()
-    if (selectedEntities.length === 0) return;
+    if (selectedEntities.length === 0 || isSendingReport || isAnalyzing) return;
+    setIsSendingReport(true)
     let enviosExitosos = 0;
     try {
       for (const entidad of selectedEntities) {
-        const res = await fetch(`${API}/emergencies`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...emergencyForm, targetEntity: entidad }) 
-        });
+        const res = await createEmergency({ ...emergencyForm, targetEntity: entidad });
         if (res.ok) enviosExitosos++;
       }
     } catch {
       showAppNotice('No se pudo conectar con el servidor para enviar el reporte.', 'error');
       return;
+    } finally {
+      setIsSendingReport(false)
     }
     if (enviosExitosos > 0) { 
+      const allSent = enviosExitosos === selectedEntities.length;
+      showAppNotice(
+        allSent
+          ? `Reporte enviado a ${enviosExitosos} entidad(es).`
+          : `Reporte enviado a ${enviosExitosos} de ${selectedEntities.length} entidad(es). Revisa la conexión.`,
+        allSent ? 'success' : 'warning'
+      );
       setEmergencyForm({ title: '', description: '', location: '', type: 'ACCIDENT', image: '' }); setSelectedEntities(['POLICIA']); setImagePreview(null)
     } else {
-      showAppNotice('No se pudo enviar el reporte. Intentalo nuevamente.', 'error');
+      showAppNotice('No se pudo enviar el reporte. Inténtalo nuevamente.', 'error');
     }
   }
 
   const updateStatus = async (id, newStatus) => {
-    const res = await fetch(`${API}/emergencies/${id}/status`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus })
-    })
-    if (res.ok) {
-      setEmergencies(emergencies.map(em => em.id === id ? { ...em, status: newStatus } : em))
-      setDetailTarget(current => current?.id === id ? { ...current, status: newStatus } : current)
+    try {
+      const res = await updateEmergencyStatus(id, newStatus)
+      if (res.ok) {
+        setEmergencies(emergencies.map(em => em.id === id ? { ...em, status: newStatus } : em))
+        setDetailTarget(current => current?.id === id ? { ...current, status: newStatus } : current)
+      } else {
+        showAppNotice('No se pudo actualizar el estado del incidente.', 'error');
+      }
+    } catch {
+      showAppNotice('No se pudo conectar con el servidor para actualizar el incidente.', 'error');
     }
   }
 
@@ -269,7 +230,7 @@ function App() {
     const id = deleteTarget.id;
     let res;
     try {
-      res = await fetch(`${API}/emergencies/${id}`, { method: 'DELETE' })
+      res = await deleteEmergencyById(id)
     } catch {
       showAppNotice('No se pudo conectar con el servidor para borrar el incidente.', 'error');
       return;
@@ -279,7 +240,7 @@ function App() {
       setDeleteTarget(null)
       setDetailTarget(current => current?.id === id ? null : current)
     } else {
-      showAppNotice('No se pudo borrar el incidente. Intentalo nuevamente.', 'error');
+      showAppNotice('No se pudo borrar el incidente. Inténtalo nuevamente.', 'error');
     }
   }
 
@@ -300,20 +261,20 @@ function App() {
 
   const getLocationErrorMessage = (error) => {
     if (!window.isSecureContext) {
-      return "La ubicacion automatica necesita HTTPS. En iPhone no funciona si abres la app por http o por una IP local sin certificado.";
+      return "La ubicación automática necesita HTTPS. En iPhone no funciona si abres la app por http o por una IP local sin certificado.";
     }
 
-    if (!error) return "No se pudo obtener la ubicacion.";
+    if (!error) return "No se pudo obtener la ubicación.";
 
     switch (error.code) {
       case GEO_ERROR.PERMISSION_DENIED:
         return "";
       case GEO_ERROR.POSITION_UNAVAILABLE:
-        return "El iPhone no pudo calcular la ubicacion. Activa Localizacion y prueba con buena senal GPS o WiFi.";
+        return "El iPhone no pudo calcular la ubicación. Activa Localización y prueba con buena señal GPS o WiFi.";
       case GEO_ERROR.TIMEOUT:
-        return "El iPhone tardo demasiado en responder la ubicacion. Intentalo de nuevo en unos segundos.";
+        return "El iPhone tardó demasiado en responder la ubicación. Inténtalo de nuevo en unos segundos.";
       default:
-        return "No se pudo obtener la ubicacion.";
+        return "No se pudo obtener la ubicación.";
     }
   }
 
@@ -330,7 +291,7 @@ function App() {
     }
 
     if (!navigator.geolocation) {
-      showAppNotice("Este navegador no permite obtener ubicacion automatica.", 'warning');
+      showAppNotice("Este navegador no permite obtener ubicación automática.", 'warning');
       return;
     }
 
@@ -360,6 +321,17 @@ function App() {
   const handleImageCapture = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showAppNotice('Selecciona un archivo de imagen válido.', 'warning');
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      showAppNotice(`La imagen supera ${MAX_IMAGE_SIZE_MB} MB. Usa una foto más liviana.`, 'warning');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result;
@@ -367,12 +339,10 @@ function App() {
       setIsAnalyzing(true);
       setEmergencyForm(prev => ({ ...prev, image: base64String, description: "Conectando con la IA..." }));
       try {
-        const response = await fetch(AI_SERVICE_URL, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imagen: base64String })
-        });
+        const response = await analyzeIncidentImage(base64String);
         if (!response.ok) throw new Error("Error IA");
         const data = await response.json();
-        const textoIA = data.descripcion;
+        const textoIA = data.descripcion || 'La IA no devolvió una descripción clara.';
         setEmergencyForm(prev => ({ ...prev, description: `[ANÁLISIS DE IA]: ${textoIA}` }));
         const textoMayusculas = textoIA.toUpperCase();
         if (textoMayusculas.includes('NO ES NECESARIA') || textoMayusculas.includes('NINGUNA EMERGENCIA')) {
@@ -382,10 +352,15 @@ function App() {
           if (textoMayusculas.includes('POLICÍA') || textoMayusculas.includes('POLICIA')) recomendadas.push('POLICIA');
           if (textoMayusculas.includes('BOMBERO') || textoMayusculas.includes('FUEGO') || textoMayusculas.includes('INCENDIO')) recomendadas.push('BOMBEROS');
           if (textoMayusculas.includes('HOSPITAL') || textoMayusculas.includes('AMBULANCIA') || textoMayusculas.includes('MÉDICO') || textoMayusculas.includes('HERIDO')) recomendadas.push('HOSPITAL');
-          setSelectedEntities(recomendadas);
+          if (recomendadas.length > 0) {
+            setSelectedEntities(recomendadas);
+          } else {
+            showAppNotice('La IA no identificó una entidad específica. Revisa la selección manualmente.', 'warning');
+          }
         }
-      } catch (error) {
+      } catch {
         setEmergencyForm(prev => ({ ...prev, description: "Error IA. Describe manualmente." }));
+        showAppNotice('No se pudo analizar la imagen con IA. Puedes continuar con la descripción manual.', 'warning');
       } finally { setIsAnalyzing(false); }
     };
     reader.readAsDataURL(file);
@@ -424,7 +399,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-2xl font-black italic leading-none">SIGEU</h1>
-                <p className="text-[10px] uppercase tracking-[.28em] text-cyan-200/80 font-bold">Sistema de Gestion</p>
+                <p className="text-[10px] uppercase tracking-[.28em] text-cyan-200/80 font-bold">Sistema de Gestión</p>
               </div>
             </div>
             <div className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-200/85">
@@ -434,8 +409,8 @@ function App() {
               <span>Soporte</span>
             </div>
             <div className="hidden sm:flex items-center gap-3">
-              <button type="button" onClick={() => setView('LOGIN')} className={["px-5 py-2.5 rounded-xl border text-sm font-bold transition-all shadow-sm", view === 'REGISTER' ? "border-white/25 text-slate-200 hover:bg-white/10 hover:text-white" : "border-cyan-300/50 bg-cyan-300/10 text-white shadow-cyan-950/40"].join(" ")}>Iniciar sesion</button>
-              <button type="button" onClick={() => setView('REGISTER')} className={["px-5 py-2.5 rounded-xl border text-sm font-bold transition-all shadow-sm", view === 'REGISTER' ? "border-cyan-300/50 bg-cyan-300/10 text-white shadow-cyan-950/40" : "border-white/25 text-slate-200 hover:bg-white/10 hover:text-white"].join(" ")}>Inscribete</button>
+              <button type="button" onClick={() => goToView('LOGIN')} className={["px-5 py-2.5 rounded-xl border text-sm font-bold transition-all shadow-sm", view === 'REGISTER' ? "border-white/25 text-slate-200 hover:bg-white/10 hover:text-white" : "border-cyan-300/50 bg-cyan-300/10 text-white shadow-cyan-950/40"].join(" ")}>Iniciar sesión</button>
+              <button type="button" onClick={() => goToView('REGISTER')} className={["px-5 py-2.5 rounded-xl border text-sm font-bold transition-all shadow-sm", view === 'REGISTER' ? "border-cyan-300/50 bg-cyan-300/10 text-white shadow-cyan-950/40" : "border-white/25 text-slate-200 hover:bg-white/10 hover:text-white"].join(" ")}>Inscríbete</button>
             </div>
           </nav>
 
@@ -448,23 +423,23 @@ function App() {
                 Reporta emergencias y coordina ayuda con SIGEU IA.
               </h2>
               <p className="mt-6 text-base md:text-xl text-slate-200/80 font-medium leading-relaxed max-w-2xl mx-auto lg:mx-0">
-                Una plataforma para que ciudadanos, policia, bomberos y hospitales gestionen incidentes desde una sola central.
+                Una plataforma para que ciudadanos, policía, bomberos y hospitales gestionen incidentes desde una sola central.
               </p>
               <div className="mt-9 grid sm:grid-cols-3 gap-3 max-w-2xl mx-auto lg:mx-0">
                 <div className="border border-white/10 bg-white/[0.06] rounded-2xl p-4 text-left">
                   <Shield size={22} className="text-cyan-300 mb-3"/>
-                  <p className="text-sm font-black">Triaje automatico</p>
+                  <p className="text-sm font-black">Triaje automático</p>
                   <p className="text-xs text-slate-300 mt-1">La IA ayuda a priorizar la escena.</p>
                 </div>
                 <div className="border border-white/10 bg-white/[0.06] rounded-2xl p-4 text-left">
                   <MapPin size={22} className="text-cyan-300 mb-3"/>
-                  <p className="text-sm font-black">Ubicacion GPS</p>
+                  <p className="text-sm font-black">Ubicación GPS</p>
                   <p className="text-xs text-slate-300 mt-1">Coordenadas listas para operar.</p>
                 </div>
                 <div className="border border-white/10 bg-white/[0.06] rounded-2xl p-4 text-left">
                   <Camera size={22} className="text-cyan-300 mb-3"/>
                   <p className="text-sm font-black">Evidencia visual</p>
-                  <p className="text-xs text-slate-300 mt-1">Imagenes para cada entidad.</p>
+                  <p className="text-xs text-slate-300 mt-1">Imágenes para cada entidad.</p>
                 </div>
               </div>
             </section>
@@ -473,7 +448,7 @@ function App() {
             <div className="bg-[#ff0000] w-14 h-14 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-[0_0_25px_rgba(255,0,0,0.5)]"><span className="text-4xl font-black italic text-white">!</span></div>
             <h1 className="text-5xl font-black italic mb-1 tracking-normal text-white">SIGEU</h1>
             <p className="text-xs uppercase tracking-[.3em] opacity-80 mb-8 font-semibold text-cyan-200">
-              {view === 'LOGIN' ? 'Sistema de Gestion' : view === 'REGISTER' ? 'Nuevo Registro' : 'Recuperacion'}
+              {view === 'LOGIN' ? 'Sistema de Gestión' : view === 'REGISTER' ? 'Nuevo Registro' : 'Recuperación'}
             </p>
 
             {authError && <div className="text-red-400 text-xs font-bold bg-red-950/40 p-3 rounded-xl border border-red-900 mb-4">{authError}</div>}
@@ -492,21 +467,21 @@ function App() {
                   </div>
                   <div className="relative">
                     <Lock size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"/>
-                    <input type="password" placeholder="Contrasena" className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+                    <input type="password" placeholder="Contraseña" className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
                   </div>
-                  <button type="submit" className="w-full h-16 bg-cyan-600 p-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-3 shadow-lg hover:bg-cyan-500 transform active:scale-95 transition-all shadow-cyan-950">
-                    INGRESAR <ArrowRight size={22}/>
+                  <button type="submit" disabled={authLoading} className="w-full h-16 bg-cyan-600 p-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-3 shadow-lg hover:bg-cyan-500 transform active:scale-95 transition-all shadow-cyan-950 disabled:cursor-not-allowed disabled:opacity-70">
+                    {authLoading ? 'INGRESANDO...' : 'INGRESAR'} {authLoading ? <Loader2 className="animate-spin" size={22}/> : <ArrowRight size={22}/>}
                   </button>
-                  <button type="button" onClick={() => setView('RECOVER')} className="text-cyan-400 text-sm hover:underline block mt-4 transition-all w-full text-center">Olvidaste la contrasena?</button>
+                  <button type="button" onClick={() => goToView('RECOVER')} className="text-cyan-400 text-sm hover:underline block mt-4 transition-all w-full text-center">¿Olvidaste la contraseña?</button>
                   <div className="border-t border-white/5 mt-8 pt-8">
-                    <button type="button" onClick={() => setView('REGISTER')} className="w-full h-14 border border-cyan-400 text-cyan-400 hover:bg-cyan-950 p-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transform active:scale-95 transition-all shadow-md">
+                    <button type="button" onClick={() => goToView('REGISTER')} className="w-full h-14 border border-cyan-400 text-cyan-400 hover:bg-cyan-950 p-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transform active:scale-95 transition-all shadow-md">
                       Crear una cuenta
                     </button>
                   </div>
                 </form>
                 <div className="mt-8 text-center px-2">
                   <p className="text-slate-400 text-xs font-medium leading-relaxed italic">
-                    <span className="text-cyan-400 font-bold">SIGEU IA:</span> Reporte ciudadano con analisis visual, triaje automatico y coordinacion de entidades de socorro.
+                    <span className="text-cyan-400 font-bold">SIGEU IA:</span> Reporte ciudadano con análisis visual, triaje automático y coordinación de entidades de socorro.
                   </p>
                 </div>
               </>
@@ -522,7 +497,7 @@ function App() {
                   errors.username = "Usa 4-15 caracteres (solo minúsculas, números o guión bajo).";
                 }
 
-                const passwordRegex = /^(?=.*[A-Z])[a-zA-Z0-9@#_\-\.]{8,20}$/;
+                const passwordRegex = /^(?=.*[A-Z])[a-zA-Z0-9@#_.-]{8,20}$/;
                 if (!passwordRegex.test(registerData.password)) {
                   errors.password = "Debe tener 8-20 caracteres, al menos 1 mayúscula y sin símbolos raros.";
                 }
@@ -616,10 +591,10 @@ function App() {
 
                 {/* --- BOTONES DE ACCIÓN --- */}
                 <div className="pt-4">
-                  <button type="submit" className={`w-full h-14 p-4 rounded-2xl font-black text-white text-sm flex items-center justify-center gap-2 shadow-lg transform active:scale-95 transition-all ${registerData.role === 'CITIZEN' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950' : 'bg-cyan-700 hover:bg-cyan-600 shadow-cyan-950'}`}>
-                    {registerData.role === 'CITIZEN' ? 'CONFIRMAR REGISTRO' : 'REGISTRAR ENTIDAD'}
+                  <button type="submit" disabled={authLoading} className={`w-full h-14 p-4 rounded-2xl font-black text-white text-sm flex items-center justify-center gap-2 shadow-lg transform active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-70 ${registerData.role === 'CITIZEN' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950' : 'bg-cyan-700 hover:bg-cyan-600 shadow-cyan-950'}`}>
+                    {authLoading ? 'PROCESANDO...' : registerData.role === 'CITIZEN' ? 'CONFIRMAR REGISTRO' : 'REGISTRAR ENTIDAD'}
                   </button>
-                  <button type="button" onClick={() => setView('LOGIN')} className="text-slate-400 text-xs font-bold hover:text-white flex items-center justify-center gap-2 transition-all w-full mt-6">
+                  <button type="button" onClick={() => goToView('LOGIN')} className="text-slate-400 text-xs font-bold hover:text-white flex items-center justify-center gap-2 transition-all w-full mt-6">
                     <ArrowLeft size={14}/> Volver al inicio de sesión
                   </button>
                 </div>
@@ -630,10 +605,10 @@ function App() {
               <form onSubmit={handleRecover} className="space-y-5">
                 <p className="text-slate-300 text-sm mb-4">Ingresa tu usuario y enviaremos una notificación al sistema para restablecer tu acceso.</p>
                 <input type="text" placeholder="Tu Usuario" className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-orange-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setRecoverData({username: e.target.value})} required />
-                <button type="submit" className="w-full h-16 bg-orange-600 p-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-3 shadow-lg hover:bg-orange-500 transform active:scale-95 transition-all shadow-orange-950">
-                  RECUPERAR CUENTA
+                <button type="submit" disabled={authLoading} className="w-full h-16 bg-orange-600 p-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-3 shadow-lg hover:bg-orange-500 transform active:scale-95 transition-all shadow-orange-950 disabled:cursor-not-allowed disabled:opacity-70">
+                  {authLoading ? 'ENVIANDO...' : 'RECUPERAR CUENTA'}
                 </button>
-                <button type="button" onClick={() => setView('LOGIN')} className="text-slate-400 text-sm hover:text-white flex items-center justify-center gap-2 mt-4 transition-all w-full mt-6">
+                <button type="button" onClick={() => goToView('LOGIN')} className="text-slate-400 text-sm hover:text-white flex items-center justify-center gap-2 mt-4 transition-all w-full mt-6">
                   <ArrowLeft size={16}/> Volver al inicio
                 </button>
               </form>
@@ -687,7 +662,7 @@ function App() {
   const entityFilterOptions = [
     { id: 'ALL', label: 'Todos', count: entityStats.total },
     { id: 'PENDING', label: 'Nuevas', count: entityStats.pending },
-    { id: 'IN_PROGRESS', label: 'En atencion', count: entityStats.progress },
+    { id: 'IN_PROGRESS', label: 'En atención', count: entityStats.progress },
     { id: 'RESOLVED', label: 'Resueltas', count: entityStats.resolved },
     { id: 'HIGH', label: 'Prioridad alta', count: entityStats.high },
     { id: 'IMAGE', label: 'Con evidencia', count: entityStats.image },
@@ -695,14 +670,12 @@ function App() {
   ];
   const entityColumns = [
     { id: 'PENDING', title: 'Nuevas alertas', icon: <Radio size={16}/>, tone: 'border-red-200 bg-red-50/70 text-red-700' },
-    { id: 'IN_PROGRESS', title: 'En atencion', icon: <Clock size={16}/>, tone: 'border-amber-200 bg-amber-50/70 text-amber-700' },
+    { id: 'IN_PROGRESS', title: 'En atención', icon: <Clock size={16}/>, tone: 'border-amber-200 bg-amber-50/70 text-amber-700' },
     { id: 'RESOLVED', title: 'Resueltas', icon: <CheckCircle size={16}/>, tone: 'border-emerald-200 bg-emerald-50/70 text-emerald-700' }
   ];
   const detailCoordinates = detailTarget ? (detailTarget.coordinates || parseEmergencyCoordinates(detailTarget.location)) : null;
   const detailStatus = detailTarget ? getStatusConfig(detailTarget.status) : null;
   const detailPriority = detailTarget ? (detailTarget.priority || getEmergencyPriority(detailTarget, user?.role)) : null;
-  const showLegacyEntityView = false;
-
   return (
     <div className={["min-h-screen font-sans transition-colors duration-300", isCitizen ? (isCitizenDark ? "bg-[#07111f] text-slate-100" : "bg-[#edf3fb] text-slate-800") : "bg-slate-50 text-slate-800"].join(" ")}>
       <nav className={[theme.bg, theme.text, "p-5 shadow-lg flex justify-between items-center sticky top-0 z-50 transition-colors"].join(" ")}>
@@ -739,7 +712,7 @@ function App() {
                   </span>
                   <h3 className="mt-4 text-3xl font-black italic tracking-normal md:text-4xl">Emitir Alerta</h3>
                   <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-300">
-                    Registra la escena con ubicacion, evidencia y entidades de respuesta en un solo envio.
+                    Registra la escena con ubicación, evidencia y entidades de respuesta en un solo envío.
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -769,7 +742,7 @@ function App() {
                   <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Coordenadas GPS</span>
                   <input type="text" placeholder="Latitud, longitud" className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.location} onChange={e => setEmergencyForm({...emergencyForm, location: e.target.value})} required />
                 </label>
-                <button type="button" onClick={handleGetLocation} className={["flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl px-5 font-black uppercase text-white shadow-lg transition-all active:scale-95 lg:w-auto", isCitizenDark ? "bg-cyan-700 shadow-cyan-950/50 hover:bg-cyan-600" : "bg-slate-900 shadow-slate-300 hover:bg-blue-700"].join(" ")} title="Obtener ubicacion GPS">
+                <button type="button" onClick={handleGetLocation} className={["flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl px-5 font-black uppercase text-white shadow-lg transition-all active:scale-95 lg:w-auto", isCitizenDark ? "bg-cyan-700 shadow-cyan-950/50 hover:bg-cyan-600" : "bg-slate-900 shadow-slate-300 hover:bg-blue-700"].join(" ")} title="Obtener ubicación GPS">
                   {isLocating ? <Loader2 className="animate-spin" size={20}/> : <Navigation size={20}/>}
                   <span className="text-xs">GPS</span>
                 </button>
@@ -777,17 +750,17 @@ function App() {
               <div className={["rounded-3xl border p-5", citizenCardClass].join(" ")}>
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <span className="text-[10px] font-black uppercase text-blue-700">Analisis con IA</span>
+                    <span className="text-[10px] font-black uppercase text-blue-700">Análisis con IA</span>
                     <p className={["mt-1 text-xs font-semibold", citizenMutedClass].join(" ")}>Agrega una imagen para ayudar a priorizar la emergencia.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <input type="file" accept="image/*" capture="environment" id="cameraInput" className="hidden" onChange={handleImageCapture} />
                     <label htmlFor="cameraInput" className="flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-blue-100 transition-all hover:bg-blue-700">
-                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Camera size={14}/>} Camara
+                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Camera size={14}/>} Cámara
                     </label>
                     <input type="file" accept="image/*" id="galleryInput" className="hidden" onChange={handleImageCapture} />
                     <label htmlFor="galleryInput" className={["flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-xs font-black uppercase shadow-sm transition-all", isCitizenDark ? "border-slate-700 bg-slate-950 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"].join(" ")}>
-                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Image size={14}/>} Galeria
+                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Image size={14}/>} Galería
                     </label>
                   </div>
                 </div>
@@ -796,7 +769,7 @@ function App() {
                     <img src={imagePreview} className="h-44 w-full rounded-xl object-cover shadow-inner" alt="Evidencia" />
                   </div>
                 )}
-                <textarea placeholder="Descripcion del incidente..." className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} required disabled={isAnalyzing}></textarea>
+                <textarea placeholder="Descripción del incidente..." className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} required disabled={isAnalyzing}></textarea>
               </div>
               </div>
               <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
@@ -807,7 +780,7 @@ function App() {
                   </div>
                   <div className="grid gap-3">
                     {[
-                      { id: 'POLICIA', label: 'Policia', detail: 'Robos, violencia y seguridad', icon: <Shield size={19}/>, active: isCitizenDark ? 'border-blue-500/60 bg-blue-950/60 text-blue-100' : 'border-blue-300 bg-blue-50 text-blue-900', iconClass: 'bg-blue-600 text-white' },
+                      { id: 'POLICIA', label: 'Policía', detail: 'Robos, violencia y seguridad', icon: <Shield size={19}/>, active: isCitizenDark ? 'border-blue-500/60 bg-blue-950/60 text-blue-100' : 'border-blue-300 bg-blue-50 text-blue-900', iconClass: 'bg-blue-600 text-white' },
                       { id: 'BOMBEROS', label: 'Bomberos', detail: 'Incendios, rescates y riesgos', icon: <Flame size={19}/>, active: isCitizenDark ? 'border-red-500/60 bg-red-950/60 text-red-100' : 'border-red-300 bg-red-50 text-red-900', iconClass: 'bg-red-600 text-white' },
                       { id: 'HOSPITAL', label: 'Hospital', detail: 'Heridos, ambulancia y salud', icon: <Hospital size={19}/>, active: isCitizenDark ? 'border-emerald-500/60 bg-emerald-950/60 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900', iconClass: 'bg-emerald-600 text-white' }
                     ].map(ent => {
@@ -829,13 +802,13 @@ function App() {
                   </div>
                 </div>
                 <div className={["rounded-3xl border p-5", isCitizenDark ? "border-red-900/40 bg-slate-900/95 shadow-black/20" : "border-red-100 bg-white shadow-sm"].join(" ")}>
-                  <button type="submit" disabled={selectedEntities.length === 0} className={`relative flex min-h-[190px] w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl p-6 text-center font-black uppercase italic text-white shadow-xl transition-all active:scale-95 sm:min-h-[210px] ${selectedEntities.length === 0 ? (isCitizenDark ? 'bg-slate-800 text-slate-500 shadow-none cursor-not-allowed' : 'bg-slate-300 text-slate-500 shadow-none cursor-not-allowed') : 'bg-[#ff0000] shadow-red-200 hover:bg-red-700'}`}>
+                  <button type="submit" disabled={selectedEntities.length === 0 || isSendingReport || isAnalyzing} className={`relative flex min-h-[190px] w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl p-6 text-center font-black uppercase italic text-white shadow-xl transition-all active:scale-95 sm:min-h-[210px] ${selectedEntities.length === 0 || isSendingReport || isAnalyzing ? (isCitizenDark ? 'bg-slate-800 text-slate-500 shadow-none cursor-not-allowed' : 'bg-slate-300 text-slate-500 shadow-none cursor-not-allowed') : 'bg-[#ff0000] shadow-red-200 hover:bg-red-700'}`}>
                     <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15">
-                      {selectedEntities.length === 0 ? <AlertTriangle size={30}/> : <ArrowRight size={30}/>}
+                      {isSendingReport ? <Loader2 className="animate-spin" size={30}/> : selectedEntities.length === 0 ? <AlertTriangle size={30}/> : <ArrowRight size={30}/>}
                     </span>
-                    <span className="text-xl tracking-normal sm:text-2xl">{selectedEntities.length === 0 ? 'Selecciona entidad' : 'Enviar reporte'}</span>
+                    <span className="text-xl tracking-normal sm:text-2xl">{isSendingReport ? 'Enviando...' : selectedEntities.length === 0 ? 'Selecciona entidad' : 'Enviar reporte'}</span>
                     <span className="max-w-xs text-xs not-italic opacity-80">
-                      {selectedEntities.length === 0 ? 'El reporte necesita al menos una entidad.' : `Se notificara a ${selectedEntities.length} entidad(es) con la ubicacion y evidencia.`}
+                      {selectedEntities.length === 0 ? 'El reporte necesita al menos una entidad.' : `Se notificará a ${selectedEntities.length} entidad(es) con la ubicación y evidencia.`}
                     </span>
                   </button>
                 </div>
@@ -854,7 +827,7 @@ function App() {
                     </span>
                     <h3 className="mt-4 text-3xl font-black italic tracking-normal">Incidentes activos</h3>
                     <p className="mt-2 max-w-2xl text-sm font-medium text-white/70">
-                      Gestiona alertas nuevas, reportes en atencion y casos resueltos desde una sola vista.
+                      Gestiona alertas nuevas, reportes en atención y casos resueltos desde una sola vista.
                     </p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
@@ -864,7 +837,7 @@ function App() {
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
                       <p className="text-2xl font-black">{entityStats.progress}</p>
-                      <p className="mt-1 text-[10px] font-black uppercase text-white/70">Atencion</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-white/70">Atención</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
                       <p className="text-2xl font-black">{entityStats.resolved}</p>
@@ -879,7 +852,7 @@ function App() {
               {[
                 { label: 'Total', value: entityStats.total, icon: <Layers size={18}/>, color: 'text-slate-700 bg-slate-100' },
                 { label: 'Nuevas', value: entityStats.pending, icon: <Radio size={18}/>, color: 'text-red-700 bg-red-100' },
-                { label: 'En atencion', value: entityStats.progress, icon: <Clock size={18}/>, color: 'text-amber-700 bg-amber-100' },
+                { label: 'En atención', value: entityStats.progress, icon: <Clock size={18}/>, color: 'text-amber-700 bg-amber-100' },
                 { label: 'Alta prioridad', value: entityStats.high, icon: <AlertTriangle size={18}/>, color: 'text-red-700 bg-red-100' },
                 { label: 'Con evidencia', value: entityStats.image, icon: <Image size={18}/>, color: 'text-blue-700 bg-blue-100' }
               ].map(item => (
@@ -899,7 +872,7 @@ function App() {
                   <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"/>
                   <input
                     type="text"
-                    placeholder="Buscar por asunto, descripcion o coordenadas"
+                    placeholder="Buscar por asunto, descripción o coordenadas"
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-4 pl-12 pr-4 text-sm font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                     value={entitySearch}
                     onChange={e => setEntitySearch(e.target.value)}
@@ -930,7 +903,7 @@ function App() {
                   {groupedEmergencies[column.id].length === 0 ? (
                     <div className="flex min-h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
                       <ListFilter size={24} className="text-slate-300"/>
-                      <p className="mt-3 text-xs font-black uppercase text-slate-400">Sin reportes aqui</p>
+                      <p className="mt-3 text-xs font-black uppercase text-slate-400">Sin reportes aquí</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -949,7 +922,7 @@ function App() {
                                 {em.priority.label}
                               </span>
                             </div>
-                            <p className="mt-3 flex items-start gap-1 text-xs font-bold text-slate-500"><MapPin size={13} className="mt-0.5 shrink-0"/> {em.location || 'Sin ubicacion'}</p>
+                            <p className="mt-3 flex items-start gap-1 text-xs font-bold text-slate-500"><MapPin size={13} className="mt-0.5 shrink-0"/> {em.location || 'Sin ubicación'}</p>
                             <p className="mt-3 max-h-14 overflow-hidden text-sm font-medium leading-relaxed text-slate-600">"{em.description}"</p>
                             <div className="mt-4 flex flex-wrap gap-2">
                               <span className={["inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase", status.className].join(" ")}>
@@ -990,90 +963,6 @@ function App() {
               ))}
             </section>
           </div>
-          {showLegacyEntityView && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-              <span className="font-bold text-slate-500 flex items-center gap-2 italic"> <Activity size={18} className="animate-pulse text-red-500"/> Incidentes Activos</span>
-            </div>
-            <div className="grid gap-4">
-              {emergencies.map(em => {
-                // --- LÓGICA DE ESTADOS VISUALES ---
-                const isResolved = em.status === 'RESOLVED';
-                const isInProgress = em.status === 'IN_PROGRESS';
-                
-                let borderClass = 'border-red-600';
-                let statusBadge = <span className="bg-red-100 text-red-700 text-[10px] px-2 py-1 rounded-full font-black ml-2 uppercase animate-pulse">Nueva Alerta</span>;
-
-                if (isResolved) {
-                  borderClass = 'border-emerald-500 opacity-60'; // Se pone verde y un poco transparente
-                  statusBadge = <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-1 rounded-full font-black ml-2 uppercase">Resuelto</span>;
-                } else if (isInProgress) {
-                  borderClass = 'border-amber-500'; // Se pone amarilla
-                  statusBadge = <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-1 rounded-full font-black ml-2 uppercase animate-pulse">En Proceso</span>;
-                }
-
-                const coordinates = parseEmergencyCoordinates(em.location);
-
-                return (
-                  <div key={em.id} className={`bg-white p-6 rounded-3xl shadow-sm border-l-[12px] ${borderClass} flex flex-col md:flex-row justify-between gap-6 relative overflow-hidden transition-all duration-500`}>
-                    <div className="flex-1">
-                      <h4 className="font-black text-xl italic text-slate-900 mb-2 flex items-center flex-wrap gap-2">
-                        {em.title} {statusBadge}
-                      </h4>
-                      <p className="text-slate-400 text-xs font-bold mb-3 flex items-center gap-1"><MapPin size={14}/> {em.location}</p>
-                      <p className="text-slate-600 text-sm italic font-medium">"{em.description}"</p>
-                      {coordinates ? (
-                        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 bg-white border-b border-slate-200">
-                            <span className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
-                              <MapPin size={14} className="text-red-600"/> Mapa del incidente
-                            </span>
-                            <a
-                              href={getIncidentMapUrl(coordinates)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800 transition-all"
-                            >
-                              Ver mapa grande
-                            </a>
-                          </div>
-                          <iframe
-                            title={`Mapa del incidente ${em.id}`}
-                            src={getIncidentMapEmbedUrl(coordinates)}
-                            className="w-full h-64 border-0"
-                            loading="lazy"
-                            referrerPolicy="no-referrer-when-downgrade"
-                          ></iframe>
-                        </div>
-                      ) : (
-                        <p className="mt-3 inline-flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase text-amber-700">
-                          <MapPin size={13}/> Ubicacion sin coordenadas validas
-                        </p>
-                      )}
-                      {em.image && <button onClick={() => setSelectedImage(em.image)} className="mt-4 flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-tighter hover:underline"><Eye size={14}/> Ver Evidencia</button>}
-                    </div>
-                    
-                    <div className="flex flex-row md:flex-col gap-2 justify-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 min-w-[140px]">
-                      
-                      {/* Ocultar botón ATENDER si ya está resuelto o en progreso */}
-                      {!isResolved && !isInProgress && (
-                        <button onClick={() => updateStatus(em.id, 'IN_PROGRESS')} className="bg-amber-500 text-white p-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black shadow-md hover:bg-amber-600 transition-all active:scale-95">ATENDER</button>
-                      )}
-                      
-                      {/* Ocultar botón RESOLVER si ya está resuelto */}
-                      {!isResolved && (
-                        <button onClick={() => updateStatus(em.id, 'RESOLVED')} className="bg-emerald-600 text-white p-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black shadow-md hover:bg-emerald-700 transition-all active:scale-95">RESOLVER</button>
-                      )}
-                      
-                      <button onClick={() => requestDeleteEmergency(em)} className="bg-white border border-slate-200 text-slate-400 p-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black hover:bg-red-50 hover:text-red-600 transition-all active:scale-95">BORRAR</button>
-                </div>
-              </div>
-            );
-            
-          })} 
-        </div>
-          </div>
-          )}
           </>
         )}
       </main>
@@ -1107,7 +996,7 @@ function App() {
               <div>
                 <h3 className="text-xl font-black italic text-slate-900">Eliminar incidente</h3>
                 <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
-                  Esta accion borrara el reporte "{deleteTarget.title}". Puedes cancelar si aun necesitas conservarlo.
+                  Esta acción borrará el reporte "{deleteTarget.title}". Puedes cancelar si aún necesitas conservarlo.
                 </p>
               </div>
             </div>
@@ -1151,13 +1040,13 @@ function App() {
             <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,.95fr)_minmax(0,1.25fr)] md:p-6">
               <section className="space-y-4">
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                  <p className="text-[10px] font-black uppercase text-slate-400">Descripcion</p>
+                  <p className="text-[10px] font-black uppercase text-slate-400">Descripción</p>
                   <p className="mt-3 text-sm font-medium leading-relaxed text-slate-700">"{detailTarget.description}"</p>
                 </div>
                 <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <p className="text-[10px] font-black uppercase text-slate-400">Ubicacion</p>
-                  <p className="mt-3 flex items-start gap-2 text-sm font-bold text-slate-700"><MapPin size={16} className="mt-0.5 shrink-0 text-red-600"/> {detailTarget.location || 'Sin ubicacion'}</p>
-                  <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-400"><Clock size={14}/> {formatEmergencyTime(detailTarget.createdAt)}</p>
+                  <p className="text-[10px] font-black uppercase text-slate-400">Ubicación</p>
+                  <p className="mt-3 flex items-start gap-2 text-sm font-bold text-slate-700"><MapPin size={16} className="mt-0.5 shrink-0 text-red-600"/> {detailTarget.location || 'Sin ubicación'}</p>
+                  <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-400"><Clock size={14}/> {formatEmergencyTime(detailTarget.createdAt)} · Hora Colombia</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <button type="button" onClick={() => copyEmergencyLocation(detailTarget.location)} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
@@ -1213,7 +1102,7 @@ function App() {
                 ) : (
                   <div className="flex min-h-[260px] flex-col items-center justify-center rounded-3xl border border-dashed border-amber-200 bg-amber-50 p-5 text-center">
                     <MapPin size={28} className="text-amber-500"/>
-                    <p className="mt-3 text-xs font-black uppercase text-amber-700">Ubicacion sin coordenadas validas</p>
+                    <p className="mt-3 text-xs font-black uppercase text-amber-700">Ubicación sin coordenadas válidas</p>
                   </div>
                 )}
                 {detailTarget.image && (
