@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, X, Image, ArrowLeft, Moon, Sun } from 'lucide-react'
+import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText } from 'lucide-react'
 
 const styles = `
   @keyframes siren-red {
@@ -40,6 +40,43 @@ const getIncidentMapUrl = ({ lat, lng }) => {
   return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
 }
 
+const getEmergencyPriority = (emergency, role) => {
+  const text = `${emergency.title || ''} ${emergency.description || ''} ${emergency.type || ''}`.toLowerCase();
+  const highByRole = {
+    POLICIA: ['arma', 'disparo', 'robo', 'asalto', 'violencia', 'secuestro', 'herido'],
+    BOMBEROS: ['incendio', 'fuego', 'humo', 'explosion', 'explosión', 'gas', 'atrapado'],
+    HOSPITAL: ['herido', 'sangre', 'ambulancia', 'inconsciente', 'grave', 'fractura', 'medico', 'médico']
+  };
+  const mediumWords = ['accidente', 'choque', 'emergencia', 'riesgo', 'auxilio'];
+  const highWords = highByRole[role] || ['emergencia', 'grave', 'herido'];
+
+  if (highWords.some(word => text.includes(word))) {
+    return { label: 'Alta', className: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' };
+  }
+  if (mediumWords.some(word => text.includes(word))) {
+    return { label: 'Media', className: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+  }
+  return { label: 'Normal', className: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
+}
+
+const getStatusConfig = (status) => {
+  switch (status) {
+    case 'RESOLVED':
+      return { label: 'Resuelto', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
+    case 'IN_PROGRESS':
+      return { label: 'En atencion', className: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+    default:
+      return { label: 'Nueva alerta', className: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' };
+  }
+}
+
+const formatEmergencyTime = (value) => {
+  if (!value) return 'Sin fecha';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha';
+  return date.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 function App() {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('sigeu_user')
@@ -74,6 +111,9 @@ function App() {
   const [selectedImage, setSelectedImage] = useState(null)
   const [appNotice, setAppNotice] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [detailTarget, setDetailTarget] = useState(null)
+  const [entityFilter, setEntityFilter] = useState('ALL')
+  const [entitySearch, setEntitySearch] = useState('')
 
   const API = 'https://sigeu-backend-production.up.railway.app/api'
   const AI_SERVICE_URL = 'https://sigeu-ai-service-production.up.railway.app/analizar'
@@ -182,10 +222,9 @@ function App() {
   }
 
   const showAppNotice = (message, type = 'warning') => {
-    const id = Date.now();
-    setAppNotice({ id, message, type });
+    setAppNotice({ message, type });
     setTimeout(() => {
-      setAppNotice(current => current?.id === id ? null : current);
+      setAppNotice(current => current?.message === message && current?.type === type ? null : current);
     }, 4500);
   }
 
@@ -215,7 +254,10 @@ function App() {
     const res = await fetch(`${API}/emergencies/${id}/status`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus })
     })
-    if (res.ok) setEmergencies(emergencies.map(em => em.id === id ? { ...em, status: newStatus } : em))
+    if (res.ok) {
+      setEmergencies(emergencies.map(em => em.id === id ? { ...em, status: newStatus } : em))
+      setDetailTarget(current => current?.id === id ? { ...current, status: newStatus } : current)
+    }
   }
 
   const requestDeleteEmergency = (emergency) => {
@@ -235,8 +277,22 @@ function App() {
     if (res.ok) {
       setEmergencies(emergencies.filter(em => em.id !== id))
       setDeleteTarget(null)
+      setDetailTarget(current => current?.id === id ? null : current)
     } else {
       showAppNotice('No se pudo borrar el incidente. Intentalo nuevamente.', 'error');
+    }
+  }
+
+  const copyEmergencyLocation = async (location) => {
+    if (!location) {
+      showAppNotice('Este incidente no tiene coordenadas para copiar.', 'warning');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(location);
+      showAppNotice('Coordenadas copiadas.', 'success');
+    } catch {
+      showAppNotice('No se pudieron copiar las coordenadas.', 'warning');
     }
   }
 
@@ -597,6 +653,55 @@ function App() {
   const citizenInputClass = isCitizenDark ? 'border-slate-700 bg-slate-950 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:ring-cyan-900/60' : 'border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-100';
   const citizenLabelClass = isCitizenDark ? 'text-slate-300' : 'text-slate-500';
   const citizenMutedClass = isCitizenDark ? 'text-slate-400' : 'text-slate-400';
+  const entitySearchTerm = entitySearch.trim().toLowerCase();
+  const enrichedEmergencies = emergencies.map(em => {
+    const coordinates = parseEmergencyCoordinates(em.location);
+    const priority = getEmergencyPriority(em, user?.role);
+    const status = em.status || 'PENDING';
+    return { ...em, coordinates, priority, status };
+  });
+  const filteredEmergencies = enrichedEmergencies.filter(em => {
+    const searchText = `${em.title || ''} ${em.description || ''} ${em.location || ''} ${em.type || ''}`.toLowerCase();
+    const matchesSearch = !entitySearchTerm || searchText.includes(entitySearchTerm);
+    const matchesFilter =
+      entityFilter === 'ALL' ||
+      em.status === entityFilter ||
+      (entityFilter === 'HIGH' && em.priority.label === 'Alta') ||
+      (entityFilter === 'IMAGE' && Boolean(em.image)) ||
+      (entityFilter === 'MAP' && Boolean(em.coordinates));
+    return matchesSearch && matchesFilter;
+  });
+  const entityStats = {
+    total: emergencies.length,
+    pending: enrichedEmergencies.filter(em => em.status !== 'IN_PROGRESS' && em.status !== 'RESOLVED').length,
+    progress: enrichedEmergencies.filter(em => em.status === 'IN_PROGRESS').length,
+    resolved: enrichedEmergencies.filter(em => em.status === 'RESOLVED').length,
+    high: enrichedEmergencies.filter(em => em.priority.label === 'Alta').length,
+    image: enrichedEmergencies.filter(em => Boolean(em.image)).length
+  };
+  const groupedEmergencies = {
+    PENDING: filteredEmergencies.filter(em => em.status !== 'IN_PROGRESS' && em.status !== 'RESOLVED'),
+    IN_PROGRESS: filteredEmergencies.filter(em => em.status === 'IN_PROGRESS'),
+    RESOLVED: filteredEmergencies.filter(em => em.status === 'RESOLVED')
+  };
+  const entityFilterOptions = [
+    { id: 'ALL', label: 'Todos', count: entityStats.total },
+    { id: 'PENDING', label: 'Nuevas', count: entityStats.pending },
+    { id: 'IN_PROGRESS', label: 'En atencion', count: entityStats.progress },
+    { id: 'RESOLVED', label: 'Resueltas', count: entityStats.resolved },
+    { id: 'HIGH', label: 'Prioridad alta', count: entityStats.high },
+    { id: 'IMAGE', label: 'Con evidencia', count: entityStats.image },
+    { id: 'MAP', label: 'Con mapa', count: enrichedEmergencies.filter(em => Boolean(em.coordinates)).length }
+  ];
+  const entityColumns = [
+    { id: 'PENDING', title: 'Nuevas alertas', icon: <Radio size={16}/>, tone: 'border-red-200 bg-red-50/70 text-red-700' },
+    { id: 'IN_PROGRESS', title: 'En atencion', icon: <Clock size={16}/>, tone: 'border-amber-200 bg-amber-50/70 text-amber-700' },
+    { id: 'RESOLVED', title: 'Resueltas', icon: <CheckCircle size={16}/>, tone: 'border-emerald-200 bg-emerald-50/70 text-emerald-700' }
+  ];
+  const detailCoordinates = detailTarget ? (detailTarget.coordinates || parseEmergencyCoordinates(detailTarget.location)) : null;
+  const detailStatus = detailTarget ? getStatusConfig(detailTarget.status) : null;
+  const detailPriority = detailTarget ? (detailTarget.priority || getEmergencyPriority(detailTarget, user?.role)) : null;
+  const showLegacyEntityView = false;
 
   return (
     <div className={["min-h-screen font-sans transition-colors duration-300", isCitizen ? (isCitizenDark ? "bg-[#07111f] text-slate-100" : "bg-[#edf3fb] text-slate-800") : "bg-slate-50 text-slate-800"].join(" ")}>
@@ -738,6 +843,154 @@ function App() {
             </form>
           </div>
         ) : (
+          <>
+          <div className="space-y-6">
+            <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className={[theme.bg, "p-6 text-white md:p-8"].join(" ")}>
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase">
+                      <Radio size={13}/> Central operativa
+                    </span>
+                    <h3 className="mt-4 text-3xl font-black italic tracking-normal">Incidentes activos</h3>
+                    <p className="mt-2 max-w-2xl text-sm font-medium text-white/70">
+                      Gestiona alertas nuevas, reportes en atencion y casos resueltos desde una sola vista.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                      <p className="text-2xl font-black">{entityStats.pending}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-white/70">Nuevas</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                      <p className="text-2xl font-black">{entityStats.progress}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-white/70">Atencion</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                      <p className="text-2xl font-black">{entityStats.resolved}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-white/70">Resueltas</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              {[
+                { label: 'Total', value: entityStats.total, icon: <Layers size={18}/>, color: 'text-slate-700 bg-slate-100' },
+                { label: 'Nuevas', value: entityStats.pending, icon: <Radio size={18}/>, color: 'text-red-700 bg-red-100' },
+                { label: 'En atencion', value: entityStats.progress, icon: <Clock size={18}/>, color: 'text-amber-700 bg-amber-100' },
+                { label: 'Alta prioridad', value: entityStats.high, icon: <AlertTriangle size={18}/>, color: 'text-red-700 bg-red-100' },
+                { label: 'Con evidencia', value: entityStats.image, icon: <Image size={18}/>, color: 'text-blue-700 bg-blue-100' }
+              ].map(item => (
+                <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={["flex h-10 w-10 items-center justify-center rounded-xl", item.color].join(" ")}>{item.icon}</span>
+                    <span className="text-3xl font-black text-slate-900">{item.value}</span>
+                  </div>
+                  <p className="mt-3 text-[10px] font-black uppercase text-slate-500">{item.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="relative min-w-0 flex-1">
+                  <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"/>
+                  <input
+                    type="text"
+                    placeholder="Buscar por asunto, descripcion o coordenadas"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-4 pl-12 pr-4 text-sm font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    value={entitySearch}
+                    onChange={e => setEntitySearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {entityFilterOptions.map(option => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setEntityFilter(option.id)}
+                      className={["rounded-xl border px-3 py-2 text-[10px] font-black uppercase transition-all", entityFilter === option.id ? "border-slate-900 bg-slate-900 text-white shadow-md" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"].join(" ")}
+                    >
+                      {option.label} <span className="ml-1 opacity-70">{option.count}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="grid gap-5 xl:grid-cols-3">
+              {entityColumns.map(column => (
+                <div key={column.id} className="min-h-[280px] rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className={["mb-4 flex items-center justify-between rounded-2xl border px-4 py-3", column.tone].join(" ")}>
+                    <span className="flex items-center gap-2 text-xs font-black uppercase">{column.icon} {column.title}</span>
+                    <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-black">{groupedEmergencies[column.id].length}</span>
+                  </div>
+                  {groupedEmergencies[column.id].length === 0 ? (
+                    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
+                      <ListFilter size={24} className="text-slate-300"/>
+                      <p className="mt-3 text-xs font-black uppercase text-slate-400">Sin reportes aqui</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {groupedEmergencies[column.id].map(em => {
+                        const status = getStatusConfig(em.status);
+                        const isResolved = em.status === 'RESOLVED';
+                        const isInProgress = em.status === 'IN_PROGRESS';
+                        return (
+                          <article key={em.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className="text-base font-black italic text-slate-900">{em.title}</h4>
+                                <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-slate-400"><Clock size={12}/> {formatEmergencyTime(em.createdAt)}</p>
+                              </div>
+                              <span className={["shrink-0 rounded-full border px-2 py-1 text-[10px] font-black uppercase", em.priority.className].join(" ")}>
+                                {em.priority.label}
+                              </span>
+                            </div>
+                            <p className="mt-3 flex items-start gap-1 text-xs font-bold text-slate-500"><MapPin size={13} className="mt-0.5 shrink-0"/> {em.location || 'Sin ubicacion'}</p>
+                            <p className="mt-3 max-h-14 overflow-hidden text-sm font-medium leading-relaxed text-slate-600">"{em.description}"</p>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <span className={["inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase", status.className].join(" ")}>
+                                <span className={["h-2 w-2 rounded-full", status.dot].join(" ")}></span>{status.label}
+                              </span>
+                              {em.image && <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-blue-700"><Image size={11}/> Evidencia</span>}
+                              {em.coordinates && <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase text-cyan-700"><MapPin size={11}/> Mapa</span>}
+                            </div>
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                              <button type="button" onClick={() => setDetailTarget(em)} className="rounded-xl bg-slate-900 p-3 text-xs font-black uppercase text-white transition-all hover:bg-slate-700">Detalle</button>
+                              {em.coordinates ? (
+                                <a href={getIncidentMapUrl(em.coordinates)} target="_blank" rel="noreferrer" className="rounded-xl border border-slate-200 bg-white p-3 text-center text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-50">Mapa</a>
+                              ) : (
+                                <button type="button" disabled className="rounded-xl border border-slate-200 bg-slate-100 p-3 text-xs font-black uppercase text-slate-400">Sin mapa</button>
+                              )}
+                              <button type="button" onClick={() => copyEmergencyLocation(em.location)} className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-black uppercase text-slate-600 transition-all hover:bg-slate-100">Copiar</button>
+                              {em.image ? (
+                                <button type="button" onClick={() => setSelectedImage(em.image)} className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-100">Evidencia</button>
+                              ) : (
+                                <button type="button" disabled className="rounded-xl border border-slate-200 bg-slate-100 p-3 text-xs font-black uppercase text-slate-400">Sin foto</button>
+                              )}
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              {!isResolved && !isInProgress && (
+                                <button type="button" onClick={() => updateStatus(em.id, 'IN_PROGRESS')} className="rounded-xl bg-amber-500 p-3 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-amber-600">Atender</button>
+                              )}
+                              {!isResolved && (
+                                <button type="button" onClick={() => updateStatus(em.id, 'RESOLVED')} className="rounded-xl bg-emerald-600 p-3 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-emerald-700">Resolver</button>
+                              )}
+                              <button type="button" onClick={() => requestDeleteEmergency(em)} className="rounded-xl border border-red-100 bg-white p-3 text-xs font-black uppercase text-red-500 transition-all hover:bg-red-50">Borrar</button>
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+          </div>
+          {showLegacyEntityView && (
           <div className="space-y-6">
             <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
               <span className="font-bold text-slate-500 flex items-center gap-2 italic"> <Activity size={18} className="animate-pulse text-red-500"/> Incidentes Activos</span>
@@ -820,6 +1073,8 @@ function App() {
           })} 
         </div>
           </div>
+          )}
+          </>
         )}
       </main>
       
@@ -828,7 +1083,7 @@ function App() {
       {appNotice && (
         <div className="fixed right-4 top-24 z-[120] max-w-sm animate-fade-in-up rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-900/20">
           <div className="flex items-start gap-3">
-            <div className={["mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white", appNotice.type === 'error' ? "bg-red-600" : "bg-amber-500"].join(" ")}>
+            <div className={["mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white", appNotice.type === 'error' ? "bg-red-600" : appNotice.type === 'success' ? "bg-emerald-600" : "bg-amber-500"].join(" ")}>
               <AlertTriangle size={18}/>
             </div>
             <div className="min-w-0 flex-1">
@@ -868,8 +1123,112 @@ function App() {
         </div>
       )}
 
+      {detailTarget && (
+        <div className="fixed inset-0 z-[115] flex items-center justify-center bg-slate-950/85 p-4 animate-fade-in-up" onClick={() => setDetailTarget(null)}>
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className={[theme.bg, "sticky top-0 z-10 flex items-start justify-between gap-4 p-5 text-white md:p-6"].join(" ")}>
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[10px] font-black uppercase text-white/70"><FileText size={13}/> Detalle del incidente</p>
+                <h3 className="mt-2 text-2xl font-black italic tracking-normal">{detailTarget.title}</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {detailStatus && (
+                    <span className={["inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] font-black uppercase", detailStatus.className].join(" ")}>
+                      <span className={["h-2 w-2 rounded-full", detailStatus.dot].join(" ")}></span>{detailStatus.label}
+                    </span>
+                  )}
+                  {detailPriority && (
+                    <span className={["inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] font-black uppercase", detailPriority.className].join(" ")}>
+                      <span className={["h-2 w-2 rounded-full", detailPriority.dot].join(" ")}></span>Prioridad {detailPriority.label}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button type="button" onClick={() => setDetailTarget(null)} className="rounded-xl bg-white/10 p-2 text-white transition-all hover:bg-white/20">
+                <X size={20}/>
+              </button>
+            </div>
+
+            <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,.95fr)_minmax(0,1.25fr)] md:p-6">
+              <section className="space-y-4">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-[10px] font-black uppercase text-slate-400">Descripcion</p>
+                  <p className="mt-3 text-sm font-medium leading-relaxed text-slate-700">"{detailTarget.description}"</p>
+                </div>
+                <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                  <p className="text-[10px] font-black uppercase text-slate-400">Ubicacion</p>
+                  <p className="mt-3 flex items-start gap-2 text-sm font-bold text-slate-700"><MapPin size={16} className="mt-0.5 shrink-0 text-red-600"/> {detailTarget.location || 'Sin ubicacion'}</p>
+                  <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-400"><Clock size={14}/> {formatEmergencyTime(detailTarget.createdAt)}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => copyEmergencyLocation(detailTarget.location)} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
+                    <Clipboard size={15}/> Copiar
+                  </button>
+                  {detailCoordinates ? (
+                    <a href={getIncidentMapUrl(detailCoordinates)} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-100">
+                      <ExternalLink size={15}/> Mapa
+                    </a>
+                  ) : (
+                    <button type="button" disabled className="rounded-2xl border border-slate-200 bg-slate-100 p-4 text-xs font-black uppercase text-slate-400">Sin mapa</button>
+                  )}
+                  {detailTarget.image ? (
+                    <button type="button" onClick={() => setSelectedImage(detailTarget.image)} className="flex items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-100">
+                      <Eye size={15}/> Evidencia
+                    </button>
+                  ) : (
+                    <button type="button" disabled className="rounded-2xl border border-slate-200 bg-slate-100 p-4 text-xs font-black uppercase text-slate-400">Sin foto</button>
+                  )}
+                  <button type="button" onClick={() => requestDeleteEmergency(detailTarget)} className="rounded-2xl border border-red-100 bg-white p-4 text-xs font-black uppercase text-red-500 transition-all hover:bg-red-50">
+                    Borrar
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {detailTarget.status !== 'RESOLVED' && detailTarget.status !== 'IN_PROGRESS' && (
+                    <button type="button" onClick={() => updateStatus(detailTarget.id, 'IN_PROGRESS')} className="rounded-2xl bg-amber-500 p-4 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-amber-600">
+                      Atender
+                    </button>
+                  )}
+                  {detailTarget.status !== 'RESOLVED' && (
+                    <button type="button" onClick={() => updateStatus(detailTarget.id, 'RESOLVED')} className="rounded-2xl bg-emerald-600 p-4 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-emerald-700">
+                      Resolver
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                {detailCoordinates ? (
+                  <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-inner">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+                      <span className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500"><MapPin size={14} className="text-red-600"/> Mapa operativo</span>
+                      <a href={getIncidentMapUrl(detailCoordinates)} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">Abrir grande</a>
+                    </div>
+                    <iframe
+                      title={`Mapa detallado del incidente ${detailTarget.id}`}
+                      src={getIncidentMapEmbedUrl(detailCoordinates)}
+                      className="h-[360px] w-full border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    ></iframe>
+                  </div>
+                ) : (
+                  <div className="flex min-h-[260px] flex-col items-center justify-center rounded-3xl border border-dashed border-amber-200 bg-amber-50 p-5 text-center">
+                    <MapPin size={28} className="text-amber-500"/>
+                    <p className="mt-3 text-xs font-black uppercase text-amber-700">Ubicacion sin coordenadas validas</p>
+                  </div>
+                )}
+                {detailTarget.image && (
+                  <button type="button" onClick={() => setSelectedImage(detailTarget.image)} className="block w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 p-2 text-left transition-all hover:border-blue-200">
+                    <img src={detailTarget.image} className="h-56 w-full rounded-2xl object-cover" alt="Evidencia del incidente" />
+                  </button>
+                )}
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedImage && (
-        <div className="fixed inset-0 bg-slate-950/90 z-[100] flex items-center justify-center p-4 animate-fade-in-up" onClick={() => setSelectedImage(null)}>
+        <div className="fixed inset-0 bg-slate-950/90 z-[130] flex items-center justify-center p-4 animate-fade-in-up" onClick={() => setSelectedImage(null)}>
           <div className="relative max-w-3xl w-full bg-white rounded-3xl p-2 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedImage(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black transition-all"><X size={20}/></button>
             <img src={selectedImage} className="w-full h-auto max-h-[80vh] object-contain rounded-2xl" alt="Zoom" />
