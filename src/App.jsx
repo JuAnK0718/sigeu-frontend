@@ -186,17 +186,64 @@ function App() {
     if (res.ok) setEmergencies(emergencies.filter(em => em.id !== id))
   }
 
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) return;
+  const GEO_ERROR = { PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 }
+
+  const getLocationErrorMessage = (error) => {
+    if (!window.isSecureContext) {
+      return "La ubicacion automatica necesita HTTPS. En iPhone no funciona si abres la app por http o por una IP local sin certificado.";
+    }
+
+    if (!error) return "No se pudo obtener la ubicacion.";
+
+    switch (error.code) {
+      case GEO_ERROR.PERMISSION_DENIED:
+        return "El navegador bloqueo la ubicacion. En iPhone revisa Ajustes > Safari > Ubicacion, o Ajustes > Privacidad y seguridad > Localizacion.";
+      case GEO_ERROR.POSITION_UNAVAILABLE:
+        return "El iPhone no pudo calcular la ubicacion. Activa Localizacion y prueba con buena senal GPS o WiFi.";
+      case GEO_ERROR.TIMEOUT:
+        return "El iPhone tardo demasiado en responder la ubicacion. Intentalo de nuevo en unos segundos.";
+      default:
+        return "No se pudo obtener la ubicacion.";
+    }
+  }
+
+  const getCurrentLocation = (options) => {
+    return new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
+  }
+
+  const handleGetLocation = async () => {
+    if (!window.isSecureContext) {
+      alert(getLocationErrorMessage());
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      alert("Este navegador no permite obtener ubicacion automatica.");
+      return;
+    }
+
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setEmergencyForm(prev => ({ ...prev, location: `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}` }));
-        setIsLocating(false);
-      }, 
-      () => { alert("No se pudo obtener la ubicación."); setIsLocating(false); },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    try {
+      let pos;
+      try {
+        pos = await getCurrentLocation({ enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+      } catch (error) {
+        const canRetry = error.code === GEO_ERROR.TIMEOUT || error.code === GEO_ERROR.POSITION_UNAVAILABLE;
+        if (!canRetry) throw error;
+        pos = await getCurrentLocation({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+      }
+
+      setEmergencyForm(prev => ({
+        ...prev,
+        location: `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`
+      }));
+    } catch (error) {
+      alert(getLocationErrorMessage(error));
+    } finally {
+      setIsLocating(false);
+    }
   }
 
   const handleImageCapture = async (e) => {
