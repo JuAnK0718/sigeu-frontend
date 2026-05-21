@@ -19,6 +19,27 @@ const styles = `
   .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
 `;
 
+const parseEmergencyCoordinates = (location) => {
+  const matches = String(location || '').match(/-?\d+(?:[.,]\d+)?/g);
+  if (!matches || matches.length < 2) return null;
+
+  const [lat, lng] = matches.slice(0, 2).map(value => Number(value.replace(',', '.')));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  return { lat, lng };
+}
+
+const getIncidentMapEmbedUrl = ({ lat, lng }) => {
+  const margin = 0.006;
+  const bbox = `${lng - margin},${lat - margin},${lng + margin},${lat + margin}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lng}`)}`;
+}
+
+const getIncidentMapUrl = ({ lat, lng }) => {
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
+}
+
 function App() {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('sigeu_user')
@@ -318,8 +339,8 @@ function App() {
               <span>Soporte</span>
             </div>
             <div className="hidden sm:flex items-center gap-3">
-              <button type="button" onClick={() => setView('LOGIN')} className="px-4 py-2 text-sm font-bold text-slate-200 hover:text-white transition-all">Iniciar sesion</button>
-              <button type="button" onClick={() => setView('REGISTER')} className="px-5 py-2 rounded-xl border border-white/25 text-sm font-bold hover:bg-white/10 transition-all">Inscribete</button>
+              <button type="button" onClick={() => setView('LOGIN')} className={["px-5 py-2.5 rounded-xl border text-sm font-bold transition-all shadow-sm", view === 'REGISTER' ? "border-white/25 text-slate-200 hover:bg-white/10 hover:text-white" : "border-cyan-300/50 bg-cyan-300/10 text-white shadow-cyan-950/40"].join(" ")}>Iniciar sesion</button>
+              <button type="button" onClick={() => setView('REGISTER')} className={["px-5 py-2.5 rounded-xl border text-sm font-bold transition-all shadow-sm", view === 'REGISTER' ? "border-cyan-300/50 bg-cyan-300/10 text-white shadow-cyan-950/40" : "border-white/25 text-slate-200 hover:bg-white/10 hover:text-white"].join(" ")}>Inscribete</button>
             </div>
           </nav>
 
@@ -612,6 +633,8 @@ function App() {
                   statusBadge = <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-1 rounded-full font-black ml-2 uppercase animate-pulse">En Proceso</span>;
                 }
 
+                const coordinates = parseEmergencyCoordinates(em.location);
+
                 return (
                   <div key={em.id} className={`bg-white p-6 rounded-3xl shadow-sm border-l-[12px] ${borderClass} flex flex-col md:flex-row justify-between gap-6 relative overflow-hidden transition-all duration-500`}>
                     <div className="flex-1">
@@ -620,6 +643,34 @@ function App() {
                       </h4>
                       <p className="text-slate-400 text-xs font-bold mb-3 flex items-center gap-1"><MapPin size={14}/> {em.location}</p>
                       <p className="text-slate-600 text-sm italic font-medium">"{em.description}"</p>
+                      {coordinates ? (
+                        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 bg-white border-b border-slate-200">
+                            <span className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
+                              <MapPin size={14} className="text-red-600"/> Mapa del incidente
+                            </span>
+                            <a
+                              href={getIncidentMapUrl(coordinates)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800 transition-all"
+                            >
+                              Ver mapa grande
+                            </a>
+                          </div>
+                          <iframe
+                            title={`Mapa del incidente ${em.id}`}
+                            src={getIncidentMapEmbedUrl(coordinates)}
+                            className="w-full h-64 border-0"
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          ></iframe>
+                        </div>
+                      ) : (
+                        <p className="mt-3 inline-flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase text-amber-700">
+                          <MapPin size={13}/> Ubicacion sin coordenadas validas
+                        </p>
+                      )}
                       {em.image && <button onClick={() => setSelectedImage(em.image)} className="mt-4 flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-tighter hover:underline"><Eye size={14}/> Ver Evidencia</button>}
                     </div>
                     
