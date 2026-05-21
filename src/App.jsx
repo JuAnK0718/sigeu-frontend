@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Trash2, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, X, Image, ArrowLeft } from 'lucide-react'
+import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, X, Image, ArrowLeft, Moon, Sun } from 'lucide-react'
 
 const styles = `
   @keyframes siren-red {
@@ -66,6 +66,7 @@ function App() {
     title: '', description: '', location: '', type: 'ACCIDENT', image: '' 
   })
   const [selectedEntities, setSelectedEntities] = useState(['POLICIA'])
+  const [citizenMode, setCitizenMode] = useState(() => localStorage.getItem('sigeu_citizen_mode') || 'light')
 
   const [isLocating, setIsLocating] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -303,6 +304,12 @@ function App() {
   }
 
   const toggleEntity = (ent) => setSelectedEntities(prev => prev.includes(ent) ? prev.filter(e => e !== ent) : [...prev, ent])
+
+  const toggleCitizenMode = () => {
+    const nextMode = citizenMode === 'dark' ? 'light' : 'dark';
+    setCitizenMode(nextMode);
+    localStorage.setItem('sigeu_citizen_mode', nextMode);
+  }
 
   const getEntityTheme = (role) => {
     switch(role) {
@@ -552,62 +559,149 @@ function App() {
   }
 
   const theme = getEntityTheme(user?.role);
+  const isCitizen = user?.role === 'CITIZEN';
+  const isCitizenDark = citizenMode === 'dark';
+  const citizenCardClass = isCitizenDark ? 'border-slate-700 bg-slate-900/95 shadow-black/30' : 'border-slate-200 bg-white shadow-sm';
+  const citizenInputClass = isCitizenDark ? 'border-slate-700 bg-slate-950 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:ring-cyan-900/60' : 'border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-100';
+  const citizenLabelClass = isCitizenDark ? 'text-slate-300' : 'text-slate-500';
+  const citizenMutedClass = isCitizenDark ? 'text-slate-400' : 'text-slate-400';
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+    <div className={["min-h-screen font-sans transition-colors duration-300", isCitizen ? (isCitizenDark ? "bg-[#07111f] text-slate-100" : "bg-[#edf3fb] text-slate-800") : "bg-slate-50 text-slate-800"].join(" ")}>
       <nav className={[theme.bg, theme.text, "p-5 shadow-lg flex justify-between items-center sticky top-0 z-50 transition-colors"].join(" ")}>
         <div className="flex items-center gap-3">
           <div className="bg-white/10 p-2 rounded-lg">{theme.icon}</div>
           <div><h2 className="font-black text-lg italic leading-none">{theme.title}</h2><p className="text-[10px] opacity-70 font-bold uppercase tracking-widest mt-1">Gestión Integrada</p></div>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-2 font-bold px-4 py-2 rounded-lg hover:bg-white/10 transition-all"><LogOut size={18} /> SALIR</button>
+        <div className="flex items-center gap-2">
+          {isCitizen && (
+            <button type="button" onClick={toggleCitizenMode} className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black uppercase transition-all hover:bg-white/10">
+              {isCitizenDark ? <Sun size={16}/> : <Moon size={16}/>} <span className="hidden sm:inline">{isCitizenDark ? 'Claro' : 'Oscuro'}</span>
+            </button>
+          )}
+          <button onClick={handleLogout} className="flex items-center gap-2 font-bold px-4 py-2 rounded-lg hover:bg-white/10 transition-all"><LogOut size={18} /> SALIR</button>
+        </div>
       </nav>
 
-      <main className="max-w-5xl mx-auto p-6 md:p-8 animate-fade-in-up">
-        {user?.role === 'CITIZEN' ? (
-          <div className="bg-white p-8 md:p-10 rounded-3xl shadow-xl border border-slate-200">
-            <h3 className="text-2xl font-black mb-1 italic">Emitir Alerta</h3>
-            <p className="text-slate-400 text-sm mb-8 font-medium">Use la cámara para que la IA analice la escena.</p>
-            <form onSubmit={handleSend} className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <input type="text" placeholder="Asunto" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500" value={emergencyForm.title} onChange={e => setEmergencyForm({...emergencyForm, title: e.target.value})} required />
-                <div className="flex gap-2">
-                  <input type="text" placeholder="Coordenadas GPS" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500" value={emergencyForm.location} onChange={e => setEmergencyForm({...emergencyForm, location: e.target.value})} required />
-                  <button type="button" onClick={handleGetLocation} className="bg-slate-800 text-white p-4 rounded-xl hover:bg-slate-700 transition-all">{isLocating ? <Loader2 className="animate-spin" size={20}/> : <Navigation size={20}/>}</button>
+      <main className={[isCitizen ? "relative max-w-7xl" : "max-w-5xl", "mx-auto p-4 sm:p-6 md:p-8 animate-fade-in-up"].join(" ")}>
+        {isCitizen && (
+          <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[2rem]">
+            <div className={["absolute inset-x-4 top-4 h-44 rounded-[2rem] border", isCitizenDark ? "border-cyan-400/10 bg-[linear-gradient(135deg,rgba(14,165,233,0.18),rgba(239,68,68,0.12),rgba(15,23,42,0))]" : "border-white/70 bg-[linear-gradient(135deg,rgba(14,165,233,0.18),rgba(239,68,68,0.12),rgba(255,255,255,0.55))]"].join(" ")}></div>
+            <div className={["absolute inset-0 opacity-60", isCitizenDark ? "bg-[linear-gradient(90deg,rgba(148,163,184,0.06)_1px,transparent_1px),linear-gradient(180deg,rgba(148,163,184,0.05)_1px,transparent_1px)] bg-[size:40px_40px]" : "bg-[linear-gradient(90deg,rgba(15,23,42,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(15,23,42,0.04)_1px,transparent_1px)] bg-[size:42px_42px]"].join(" ")}></div>
+          </div>
+        )}
+        {isCitizen ? (
+          <div className={["relative z-10 overflow-hidden rounded-3xl border shadow-2xl", isCitizenDark ? "border-slate-700 bg-slate-900 shadow-black/30" : "border-slate-200 bg-white shadow-slate-200/70"].join(" ")}>
+            <div className="relative overflow-hidden bg-[#0f172a] px-6 py-7 text-white md:px-10 md:py-9">
+              <div className="absolute left-0 top-0 h-full w-2 bg-red-600"></div>
+              <div className="absolute right-0 top-0 h-full w-2 bg-blue-600"></div>
+              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase text-cyan-100">
+                    <Activity size={13} className="text-red-300"/> Reporte ciudadano
+                  </span>
+                  <h3 className="mt-4 text-3xl font-black italic tracking-normal md:text-4xl">Emitir Alerta</h3>
+                  <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-300">
+                    Registra la escena con ubicacion, evidencia y entidades de respuesta en un solo envio.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
+                    <Navigation size={18} className="mx-auto text-cyan-300"/>
+                    <p className="mt-2 text-[10px] font-black uppercase text-slate-200">GPS</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
+                    <Camera size={18} className="mx-auto text-cyan-300"/>
+                    <p className="mt-2 text-[10px] font-black uppercase text-slate-200">Foto</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
+                    <Shield size={18} className="mx-auto text-cyan-300"/>
+                    <p className="mt-2 text-[10px] font-black uppercase text-slate-200">Apoyo</p>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-4">
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Análisis con IA</span>
-                  <div className="flex gap-2">
+            </div>
+            <form onSubmit={handleSend} className={["grid gap-6 p-5 md:p-8 lg:p-10 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,.8fr)]", isCitizenDark ? "bg-slate-950/70" : "bg-slate-50/80"].join(" ")}>
+              <div className="space-y-6">
+              <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+                <label className="space-y-2">
+                  <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Asunto del reporte</span>
+                  <input type="text" placeholder="Ej. Accidente en la avenida" className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.title} onChange={e => setEmergencyForm({...emergencyForm, title: e.target.value})} required />
+                </label>
+                <label className="space-y-2">
+                  <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Coordenadas GPS</span>
+                  <input type="text" placeholder="Latitud, longitud" className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.location} onChange={e => setEmergencyForm({...emergencyForm, location: e.target.value})} required />
+                </label>
+                <button type="button" onClick={handleGetLocation} className={["flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl px-5 font-black uppercase text-white shadow-lg transition-all active:scale-95 lg:w-auto", isCitizenDark ? "bg-cyan-700 shadow-cyan-950/50 hover:bg-cyan-600" : "bg-slate-900 shadow-slate-300 hover:bg-blue-700"].join(" ")} title="Obtener ubicacion GPS">
+                  {isLocating ? <Loader2 className="animate-spin" size={20}/> : <Navigation size={20}/>}
+                  <span className="text-xs">GPS</span>
+                </button>
+              </div>
+              <div className={["rounded-3xl border p-5", citizenCardClass].join(" ")}>
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-blue-700">Analisis con IA</span>
+                    <p className={["mt-1 text-xs font-semibold", citizenMutedClass].join(" ")}>Agrega una imagen para ayudar a priorizar la emergencia.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <input type="file" accept="image/*" capture="environment" id="cameraInput" className="hidden" onChange={handleImageCapture} />
-                    <label htmlFor="cameraInput" className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-xs font-black cursor-pointer flex items-center gap-2 hover:bg-blue-200 uppercase tracking-tighter transition-all shadow-sm">
-                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Camera size={14}/>} Cámara
+                    <label htmlFor="cameraInput" className="flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-blue-100 transition-all hover:bg-blue-700">
+                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Camera size={14}/>} Camara
                     </label>
                     <input type="file" accept="image/*" id="galleryInput" className="hidden" onChange={handleImageCapture} />
-                    <label htmlFor="galleryInput" className="bg-slate-100 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-xs font-black cursor-pointer flex items-center gap-2 hover:bg-slate-200 uppercase tracking-tighter transition-all shadow-sm">
-                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Image size={14}/>} Galería
+                    <label htmlFor="galleryInput" className={["flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-xs font-black uppercase shadow-sm transition-all", isCitizenDark ? "border-slate-700 bg-slate-950 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"].join(" ")}>
+                      {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Image size={14}/>} Galeria
                     </label>
                   </div>
                 </div>
-                {imagePreview && <img src={imagePreview} className="w-full h-40 object-cover rounded-2xl border-2 border-blue-100 shadow-inner" alt="Evidencia" />}
-                <textarea placeholder="Descripción del incidente..." className={["w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none transition-all", isAnalyzing ? "opacity-50 animate-pulse bg-blue-50" : ""].join(" ")} rows="4" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} required disabled={isAnalyzing}></textarea>
+                {imagePreview && (
+                  <div className={["mt-5 overflow-hidden rounded-2xl border p-2", isCitizenDark ? "border-blue-900/60 bg-blue-950/30" : "border-blue-100 bg-blue-50"].join(" ")}>
+                    <img src={imagePreview} className="h-44 w-full rounded-xl object-cover shadow-inner" alt="Evidencia" />
+                  </div>
+                )}
+                <textarea placeholder="Descripcion del incidente..." className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} required disabled={isAnalyzing}></textarea>
               </div>
-              <div className="grid md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                <div className="flex flex-col gap-3 justify-center">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Entidades a Notificar:</span>
-                  <div className="flex flex-col gap-2">
-                    {['POLICIA', 'BOMBEROS', 'HOSPITAL'].map(ent => (
-                      <label key={ent} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-blue-400 transition-all shadow-sm">
-                        <input type="checkbox" className="w-5 h-5 accent-blue-600 cursor-pointer" checked={selectedEntities.includes(ent)} onChange={() => toggleEntity(ent)} />
-                        <span className="font-bold text-sm text-slate-700">{ent}</span>
-                      </label>
-                    ))}
+              </div>
+              <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
+                <div className={["rounded-3xl border p-5", citizenCardClass].join(" ")}>
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <span className={["text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Entidades a notificar</span>
+                    <span className={["rounded-full px-3 py-1 text-[10px] font-black", isCitizenDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-500"].join(" ")}>{selectedEntities.length}/3 seleccionadas</span>
+                  </div>
+                  <div className="grid gap-3">
+                    {[
+                      { id: 'POLICIA', label: 'Policia', detail: 'Robos, violencia y seguridad', icon: <Shield size={19}/>, active: isCitizenDark ? 'border-blue-500/60 bg-blue-950/60 text-blue-100' : 'border-blue-300 bg-blue-50 text-blue-900', iconClass: 'bg-blue-600 text-white' },
+                      { id: 'BOMBEROS', label: 'Bomberos', detail: 'Incendios, rescates y riesgos', icon: <Flame size={19}/>, active: isCitizenDark ? 'border-red-500/60 bg-red-950/60 text-red-100' : 'border-red-300 bg-red-50 text-red-900', iconClass: 'bg-red-600 text-white' },
+                      { id: 'HOSPITAL', label: 'Hospital', detail: 'Heridos, ambulancia y salud', icon: <Hospital size={19}/>, active: isCitizenDark ? 'border-emerald-500/60 bg-emerald-950/60 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900', iconClass: 'bg-emerald-600 text-white' }
+                    ].map(ent => {
+                      const isSelected = selectedEntities.includes(ent.id);
+                      return (
+                        <label key={ent.id} className={["flex cursor-pointer items-center gap-4 rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5", isSelected ? ent.active : (isCitizenDark ? "border-slate-700 bg-slate-950/70 text-slate-200 hover:border-cyan-700 hover:bg-slate-900" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-white")].join(" ")}>
+                          <input type="checkbox" className="sr-only" checked={isSelected} onChange={() => toggleEntity(ent.id)} />
+                          <span className={["flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", isSelected ? ent.iconClass : (isCitizenDark ? "border border-slate-700 bg-slate-900 text-slate-400" : "border border-slate-200 bg-white text-slate-500")].join(" ")}>
+                            {ent.icon}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-black uppercase">{ent.label}</span>
+                            <span className="block text-xs font-semibold opacity-70">{ent.detail}</span>
+                          </span>
+                          {isSelected && <CheckCircle size={20} className="shrink-0 text-emerald-500"/>}
+                        </label>
+                      )
+                    })}
                   </div>
                 </div>
-                <button type="submit" disabled={selectedEntities.length === 0} className={`w-full h-full min-h-[60px] text-white p-4 rounded-xl font-black text-lg shadow-lg flex items-center justify-center gap-2 transform transition-all uppercase italic ${selectedEntities.length === 0 ? 'bg-slate-300 cursor-not-allowed shadow-none text-slate-500' : 'bg-[#ff0000] shadow-red-500/30 hover:bg-red-700 active:scale-95'}`}>
-                  {selectedEntities.length === 0 ? 'FALSA ALARMA' : 'ENVIAR REPORTE'}
-                </button>
+                <div className={["rounded-3xl border p-5", isCitizenDark ? "border-red-900/40 bg-slate-900/95 shadow-black/20" : "border-red-100 bg-white shadow-sm"].join(" ")}>
+                  <button type="submit" disabled={selectedEntities.length === 0} className={`relative flex min-h-[190px] w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl p-6 text-center font-black uppercase italic text-white shadow-xl transition-all active:scale-95 sm:min-h-[210px] ${selectedEntities.length === 0 ? (isCitizenDark ? 'bg-slate-800 text-slate-500 shadow-none cursor-not-allowed' : 'bg-slate-300 text-slate-500 shadow-none cursor-not-allowed') : 'bg-[#ff0000] shadow-red-200 hover:bg-red-700'}`}>
+                    <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15">
+                      {selectedEntities.length === 0 ? <AlertTriangle size={30}/> : <ArrowRight size={30}/>}
+                    </span>
+                    <span className="text-xl tracking-normal sm:text-2xl">{selectedEntities.length === 0 ? 'Selecciona entidad' : 'Enviar reporte'}</span>
+                    <span className="max-w-xs text-xs not-italic opacity-80">
+                      {selectedEntities.length === 0 ? 'El reporte necesita al menos una entidad.' : `Se notificara a ${selectedEntities.length} entidad(es) con la ubicacion y evidencia.`}
+                    </span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
