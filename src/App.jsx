@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText } from 'lucide-react'
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
+import { EmergencyDashboard, EmergencyReport } from './models/EmergencyReport'
+import { SigeuUser } from './models/SigeuUser'
 import { analyzeIncidentImage, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, loginUser, recoverUser, registerUser, updateEmergencyStatus } from './services/sigeuApi'
-import { formatEmergencyTime, getEmergencyPriority, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig, parseEmergencyCoordinates } from './utils/emergencies'
+import { formatEmergencyTime, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig } from './utils/emergencies'
 
 const styles = `
   @keyframes siren-red {
@@ -24,13 +26,12 @@ const styles = `
 
 function App() {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('sigeu_user')
-    return saved ? JSON.parse(saved) : null
+    return SigeuUser.fromStorage(localStorage.getItem('sigeu_user'))
   })
   
   
   const [view, setView] = useState(() => {
-    return localStorage.getItem('sigeu_user') ? 'DASHBOARD' : 'LOGIN'
+    return SigeuUser.fromStorage(localStorage.getItem('sigeu_user')) ? 'DASHBOARD' : 'LOGIN'
   })
   
   const [emergencies, setEmergencies] = useState([])
@@ -100,20 +101,19 @@ function App() {
       const res = await loginUser(loginData)
       if (res.ok) { 
         const userData = await res.json()
-        const esCiudadanoBD = userData.role === 'CITIZEN';
-        const seleccionCiudadano = loginRole === 'CITIZEN';
+        const sessionUser = SigeuUser.fromApi(userData)
 
-        if (seleccionCiudadano && !esCiudadanoBD) {
+        if (loginRole === 'CITIZEN' && !sessionUser.isCitizen()) {
           setAuthError('Estas credenciales son de Entidad. Selecciona Entidad.');
           return;
         }
-        if (!seleccionCiudadano && esCiudadanoBD) {
+        if (!sessionUser.matchesLoginMode(loginRole)) {
           setAuthError('Estas credenciales son de Ciudadano. Selecciona Ciudadano.');
           return;
         }
 
-        setUser(userData)
-        localStorage.setItem('sigeu_user', JSON.stringify(userData))
+        setUser(sessionUser)
+        localStorage.setItem('sigeu_user', JSON.stringify(sessionUser))
         goToView('DASHBOARD') 
       } else {
         const errorText = await res.text()
@@ -211,8 +211,8 @@ function App() {
     try {
       const res = await updateEmergencyStatus(id, newStatus)
       if (res.ok) {
-        setEmergencies(emergencies.map(em => em.id === id ? { ...em, status: newStatus } : em))
-        setDetailTarget(current => current?.id === id ? { ...current, status: newStatus } : current)
+        setEmergencies(current => current.map(em => em.id === id ? { ...em, status: newStatus } : em))
+        setDetailTarget(current => current?.id === id ? EmergencyReport.fromApi(current, user?.role).withStatus(newStatus) : current)
       } else {
         showAppNotice('No se pudo actualizar el estado del incidente.', 'error');
       }
@@ -236,7 +236,7 @@ function App() {
       return;
     }
     if (res.ok) {
-      setEmergencies(emergencies.filter(em => em.id !== id))
+      setEmergencies(current => current.filter(em => em.id !== id))
       setDeleteTarget(null)
       setDetailTarget(current => current?.id === id ? null : current)
     } else {
@@ -628,37 +628,9 @@ function App() {
   const citizenInputClass = isCitizenDark ? 'border-slate-700 bg-slate-950 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:ring-cyan-900/60' : 'border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-100';
   const citizenLabelClass = isCitizenDark ? 'text-slate-300' : 'text-slate-500';
   const citizenMutedClass = isCitizenDark ? 'text-slate-400' : 'text-slate-400';
-  const entitySearchTerm = entitySearch.trim().toLowerCase();
-  const enrichedEmergencies = emergencies.map(em => {
-    const coordinates = parseEmergencyCoordinates(em.location);
-    const priority = getEmergencyPriority(em, user?.role);
-    const status = em.status || 'PENDING';
-    return { ...em, coordinates, priority, status };
-  });
-  const filteredEmergencies = enrichedEmergencies.filter(em => {
-    const searchText = `${em.title || ''} ${em.description || ''} ${em.location || ''} ${em.type || ''}`.toLowerCase();
-    const matchesSearch = !entitySearchTerm || searchText.includes(entitySearchTerm);
-    const matchesFilter =
-      entityFilter === 'ALL' ||
-      em.status === entityFilter ||
-      (entityFilter === 'HIGH' && em.priority.label === 'Alta') ||
-      (entityFilter === 'IMAGE' && Boolean(em.image)) ||
-      (entityFilter === 'MAP' && Boolean(em.coordinates));
-    return matchesSearch && matchesFilter;
-  });
-  const entityStats = {
-    total: emergencies.length,
-    pending: enrichedEmergencies.filter(em => em.status !== 'IN_PROGRESS' && em.status !== 'RESOLVED').length,
-    progress: enrichedEmergencies.filter(em => em.status === 'IN_PROGRESS').length,
-    resolved: enrichedEmergencies.filter(em => em.status === 'RESOLVED').length,
-    high: enrichedEmergencies.filter(em => em.priority.label === 'Alta').length,
-    image: enrichedEmergencies.filter(em => Boolean(em.image)).length
-  };
-  const groupedEmergencies = {
-    PENDING: filteredEmergencies.filter(em => em.status !== 'IN_PROGRESS' && em.status !== 'RESOLVED'),
-    IN_PROGRESS: filteredEmergencies.filter(em => em.status === 'IN_PROGRESS'),
-    RESOLVED: filteredEmergencies.filter(em => em.status === 'RESOLVED')
-  };
+  const dashboard = new EmergencyDashboard(emergencies, user?.role);
+  const entityStats = dashboard.stats;
+  const groupedEmergencies = dashboard.groupByStatus(entitySearch, entityFilter);
   const entityFilterOptions = [
     { id: 'ALL', label: 'Todos', count: entityStats.total },
     { id: 'PENDING', label: 'Nuevas', count: entityStats.pending },
@@ -666,16 +638,17 @@ function App() {
     { id: 'RESOLVED', label: 'Resueltas', count: entityStats.resolved },
     { id: 'HIGH', label: 'Prioridad alta', count: entityStats.high },
     { id: 'IMAGE', label: 'Con evidencia', count: entityStats.image },
-    { id: 'MAP', label: 'Con mapa', count: enrichedEmergencies.filter(em => Boolean(em.coordinates)).length }
+    { id: 'MAP', label: 'Con mapa', count: entityStats.map }
   ];
   const entityColumns = [
     { id: 'PENDING', title: 'Nuevas alertas', icon: <Radio size={16}/>, tone: 'border-red-200 bg-red-50/70 text-red-700' },
     { id: 'IN_PROGRESS', title: 'En atención', icon: <Clock size={16}/>, tone: 'border-amber-200 bg-amber-50/70 text-amber-700' },
     { id: 'RESOLVED', title: 'Resueltas', icon: <CheckCircle size={16}/>, tone: 'border-emerald-200 bg-emerald-50/70 text-emerald-700' }
   ];
-  const detailCoordinates = detailTarget ? (detailTarget.coordinates || parseEmergencyCoordinates(detailTarget.location)) : null;
-  const detailStatus = detailTarget ? getStatusConfig(detailTarget.status) : null;
-  const detailPriority = detailTarget ? (detailTarget.priority || getEmergencyPriority(detailTarget, user?.role)) : null;
+  const detailReport = detailTarget ? EmergencyReport.fromApi(detailTarget, user?.role) : null;
+  const detailCoordinates = detailReport ? detailReport.coordinates : null;
+  const detailStatus = detailReport ? getStatusConfig(detailReport.status) : null;
+  const detailPriority = detailReport ? detailReport.priority : null;
   return (
     <div className={["min-h-screen font-sans transition-colors duration-300", isCitizen ? (isCitizenDark ? "bg-[#07111f] text-slate-100" : "bg-[#edf3fb] text-slate-800") : "bg-slate-50 text-slate-800"].join(" ")}>
       <nav className={[theme.bg, theme.text, "p-5 shadow-lg flex justify-between items-center sticky top-0 z-50 transition-colors"].join(" ")}>
