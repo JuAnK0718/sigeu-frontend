@@ -1,17 +1,17 @@
 # SIGEU Frontend
 
-SIGEU es una interfaz web para reportar y gestionar emergencias entre ciudadanos y entidades operativas. La app permite registrar incidentes con ubicación, evidencia visual, análisis por IA y seguimiento por estado desde un panel de entidad.
+SIGEU es una aplicación web diseñada para facilitar el reporte y la gestión de emergencias entre ciudadanos y entidades de respuesta. Permite registrar incidentes incluyendo ubicación, evidencia fotográfica, análisis automático por IA y seguimiento del estado desde un panel dedicado por entidad.
 
 ## Funcionalidades
 
-- Inicio de sesión por perfil ciudadano o entidad.
-- Registro de ciudadanos y entidades operativas.
-- Reporte ciudadano con asunto, ubicación GPS, descripción, imagen y entidades a notificar.
-- Análisis de imagen mediante servicio de IA.
-- Panel operativo para Policía, Bomberos y Hospital.
-- Filtros por estado, prioridad, evidencia y mapa.
-- Vista de detalle con evidencia, coordenadas, mapa y acciones de estado.
-- Tema claro/oscuro para el formulario ciudadano.
+- Acceso diferenciado según perfil: ciudadano o entidad operativa.
+- Creación de cuentas para ciudadanos y entidades de respuesta.
+- Formulario ciudadano para reportar emergencias con asunto, coordenadas GPS, descripción, imagen adjunta y selección de entidades a alertar.
+- Evaluación automática de imágenes a través de un servicio de inteligencia artificial.
+- Panel de gestión para Policía, Bomberos y Hospital.
+- Herramientas de filtrado por estado, prioridad, evidencia visual y vista de mapa.
+- Vista detallada del incidente con evidencia, coordenadas, mapa integrado y controles de cambio de estado.
+- Soporte de tema claro y oscuro en el formulario ciudadano.
 
 ## Tecnologías
 
@@ -42,19 +42,19 @@ VITE_API_URL=https://sigeu-backend-production.up.railway.app/api
 VITE_AI_SERVICE_URL=https://sigeu-ai-service-production.up.railway.app/analizar
 ```
 
-Si no defines estas variables, la app usa esos servicios por defecto.
+Si no defines estas variables, la app utilizará esos servicios de forma predeterminada.
 
 ## Ejecución Local
 
-En Windows PowerShell, si `npm run dev` está bloqueado por la política de scripts, usa:
+En Windows PowerShell, si `npm run dev` está bloqueado por la política de ejecución de scripts, utiliza:
 
 ```powershell
 npm.cmd run dev
 ```
 
-Luego abre:
+Luego abre en el navegador:
 
-```text
+```
 http://localhost:5173/
 ```
 
@@ -65,6 +65,6 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-## Notas De Entrega
+## Notas de Entrega
 
-El frontend está preparado para funcionar con los endpoints actuales del backend. Algunas mejoras de producto, como permisos reales de entidad, historial ciudadano, número de caso y trazabilidad completa, requieren cambios coordinados en backend.
+El frontend está listo para operar con los endpoints disponibles del backend actual. Ciertas mejoras futuras —como permisos por entidad, historial de reportes ciudadanos, numeración de casos y trazabilidad completa— requerirán ajustes coordinados en el lado del backend.
