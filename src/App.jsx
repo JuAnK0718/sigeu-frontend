@@ -181,29 +181,43 @@ function App() {
     e.preventDefault()
     if (selectedEntities.length === 0 || isSendingReport || isAnalyzing) return;
     setIsSendingReport(true)
-    let enviosExitosos = 0;
+    const failedDeliveries = [];
+    let successfulDeliveries = 0;
     try {
       for (const entidad of selectedEntities) {
-        const res = await createEmergency({ ...emergencyForm, targetEntity: entidad });
-        if (res.ok) enviosExitosos++;
+        const payload = {
+          ...emergencyForm,
+          title: emergencyForm.title.trim(),
+          description: emergencyForm.description.trim(),
+          location: emergencyForm.location.trim(),
+          targetEntity: entidad,
+        };
+        const res = await createEmergency(payload);
+        if (res.ok) {
+          successfulDeliveries++;
+        } else {
+          const errorText = await res.text();
+          failedDeliveries.push(`${entidad}: ${errorText || `error ${res.status}`}`);
+        }
       }
-    } catch {
-      showAppNotice('No se pudo conectar con el servidor para enviar el reporte.', 'error');
+    } catch (error) {
+      console.error(error);
+      showAppNotice('No se pudo conectar con el backend. Revisa que Railway o el backend local esten activos.', 'error');
       return;
     } finally {
       setIsSendingReport(false)
     }
-    if (enviosExitosos > 0) { 
-      const allSent = enviosExitosos === selectedEntities.length;
+    if (successfulDeliveries > 0) { 
+      const allSent = successfulDeliveries === selectedEntities.length;
       showAppNotice(
         allSent
-          ? `Reporte enviado a ${enviosExitosos} entidad(es).`
-          : `Reporte enviado a ${enviosExitosos} de ${selectedEntities.length} entidad(es). Revisa la conexión.`,
+          ? `Reporte enviado a ${successfulDeliveries} entidad(es).`
+          : `Reporte enviado a ${successfulDeliveries} de ${selectedEntities.length}. Fallo: ${failedDeliveries.join(' | ')}`,
         allSent ? 'success' : 'warning'
       );
       setEmergencyForm({ title: '', description: '', location: '', type: 'ACCIDENT', image: '' }); setSelectedEntities(['POLICIA']); setImagePreview(null)
     } else {
-      showAppNotice('No se pudo enviar el reporte. Inténtalo nuevamente.', 'error');
+      showAppNotice(`No se pudo enviar el reporte. ${failedDeliveries.join(' | ') || 'El backend no respondio.'}`, 'error');
     }
   }
 
