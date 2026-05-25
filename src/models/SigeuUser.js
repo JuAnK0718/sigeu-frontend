@@ -41,7 +41,6 @@ export class SigeuUser {
       username: this.username,
       role: this.role,
       name: this.name,
-      token: this.token,
     };
   }
 }

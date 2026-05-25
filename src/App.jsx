@@ -3,7 +3,7 @@ import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Act
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
 import { EmergencyDashboard, EmergencyReport } from './models/EmergencyReport'
 import { SigeuUser } from './models/SigeuUser'
-import { analyzeIncidentImage, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, loginUser, recoverUser, registerUser, updateEmergencyStatus } from './services/sigeuApi'
+import { analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, loginUser, recoverUser, registerUser, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
 import { formatEmergencyTime, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig } from './utils/emergencies'
 
 const styles = `
@@ -45,7 +45,7 @@ function App() {
   
   const [emergencies, setEmergencies] = useState([])
   const [loginData, setLoginData] = useState({ username: '', password: '' })
-  const [registerData, setRegisterData] = useState({ username: '', password: '', role: 'CITIZEN' })
+  const [registerData, setRegisterData] = useState({ username: '', password: '', fullName: '', role: 'CITIZEN' })
   const [recoverData, setRecoverData] = useState({ username: '' })
   
   const [loginRole, setLoginRole] = useState('CITIZEN')
@@ -96,10 +96,22 @@ function App() {
     setAuthSuccess('')
   }
 
+  const clearSensitiveAuthFields = () => {
+    setLoginData(current => ({ ...current, password: '' }))
+    setRegisterData(current => ({ ...current, password: '' }))
+  }
+
   const goToView = (nextView) => {
     clearAuthFeedback()
     setView(nextView)
   }
+
+  useEffect(() => {
+    if (user?.token) {
+      setAuthToken(user.token)
+      localStorage.setItem('sigeu_user', JSON.stringify(user))
+    }
+  }, [user])
 
   useEffect(() => {
     let intervalId;
@@ -125,8 +137,12 @@ function App() {
     e.preventDefault()
     setAuthError('')
     setAuthLoading(true)
+    const credentials = {
+      username: loginData.username,
+      password: loginData.password,
+    }
     try {
-      const res = await loginUser(loginData)
+      const res = await loginUser(credentials)
       if (res.ok) { 
         const userData = await res.json()
         const sessionUser = SigeuUser.fromApi(userData)
@@ -150,6 +166,7 @@ function App() {
     } catch {
       setAuthError('Error de conexión con el servidor')
     } finally {
+      clearSensitiveAuthFields()
       setAuthLoading(false)
     }
   }
@@ -158,13 +175,16 @@ function App() {
     e.preventDefault()
     setAuthError('')
     setAuthLoading(true)
+    const registrationData = {
+      ...registerData,
+    }
     try {
-      const res = await registerUser(registerData)
+      const res = await registerUser(registrationData)
       if (res.ok) {
         setAuthSuccess('¡Cuenta creada con éxito! Ahora puedes iniciar sesión.')
         const loginRes = await loginUser({
-          username: registerData.username,
-          password: registerData.password,
+          username: registrationData.username,
+          password: registrationData.password,
         })
 
         if (loginRes.ok) {
@@ -186,6 +206,7 @@ function App() {
     } catch {
       setAuthError('Error de conexión con el servidor')
     } finally {
+      clearSensitiveAuthFields()
       setAuthLoading(false)
     }
   }
@@ -211,7 +232,7 @@ function App() {
   }
 
   const handleLogout = () => {
-    setUser(null); localStorage.removeItem('sigeu_user'); goToView('LOGIN'); setImagePreview(null);
+    setUser(null); clearAuthToken(); localStorage.removeItem('sigeu_user'); goToView('LOGIN'); setImagePreview(null);
   }
 
   const showAppNotice = (message, type = 'warning') => {
@@ -521,11 +542,11 @@ function App() {
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="relative">
                     <User size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"/>
-                    <input type="text" placeholder="Usuario" maxLength={FIELD_LIMITS.username} className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, username: e.target.value})} required />
+                    <input type="text" placeholder="Usuario" value={loginData.username} maxLength={FIELD_LIMITS.username} autoComplete="username" autoCapitalize="none" spellCheck={false} className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, username: e.target.value})} required />
                   </div>
                   <div className="relative">
                     <Lock size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"/>
-                    <input type={showLoginPassword ? "text" : "password"} placeholder="Contraseña" maxLength={FIELD_LIMITS.password} className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-12 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+                    <input type={showLoginPassword ? "text" : "password"} placeholder="Contraseña" value={loginData.password} maxLength={FIELD_LIMITS.password} autoComplete="current-password" autoCapitalize="none" spellCheck={false} className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-12 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
                     <button type="button" onClick={() => setShowLoginPassword(current => !current)} className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-all hover:bg-white/10 hover:text-white" aria-label={showLoginPassword ? "Ocultar password" : "Mostrar password"}>
                       {showLoginPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
                     </button>
@@ -608,7 +629,9 @@ function App() {
                   <input 
                     type="text" 
                     placeholder={registerData.role === 'CITIZEN' ? 'Ej. Juan Camilo Pérez' : 'Ej. Estación Central Sur'} 
+                    value={registerData.fullName}
                     maxLength={FIELD_LIMITS.name}
+                    autoComplete="name"
                     className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-sm transition-all" 
                     onChange={e => setRegisterData({...registerData, fullName: e.target.value})} 
                     required 
@@ -623,7 +646,11 @@ function App() {
                   <input 
                     type="text" 
                     placeholder={registerData.role === 'CITIZEN' ? 'Ej. juancamilo_99' : 'Ej. pol_central_01'} 
+                    value={registerData.username}
                     maxLength={15}
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     className={`w-full bg-white/5 border ${formErrors.username ? 'border-red-500' : 'border-white/10 focus:border-cyan-400'} p-4 rounded-2xl outline-none focus:bg-white/[0.08] text-white text-sm transition-all`}
                     onChange={e => {
                       setRegisterData({...registerData, username: e.target.value});
@@ -643,7 +670,11 @@ function App() {
                     <input 
                       type={showRegisterPassword ? "text" : "password"} 
                       placeholder="Password seguro" 
+                      value={registerData.password}
                       maxLength={FIELD_LIMITS.password}
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       className={`w-full bg-white/5 border ${formErrors.password ? 'border-red-500' : 'border-white/10 focus:border-cyan-400'} p-4 pr-12 rounded-2xl outline-none focus:bg-white/[0.08] text-white text-sm transition-all`}
                       onChange={e => {
                         setRegisterData({...registerData, password: e.target.value});

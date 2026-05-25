@@ -2,12 +2,23 @@ import { AI_SERVICE_URL, API_URL } from '../config';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
-const getStoredToken = () => {
-  try {
-    return JSON.parse(localStorage.getItem('sigeu_user') || '{}').token || '';
-  } catch {
-    return '';
+let runtimeAuthToken = '';
+
+export const setAuthToken = (token) => {
+  runtimeAuthToken = token || '';
+  if (runtimeAuthToken) {
+    sessionStorage.setItem('sigeu_token', runtimeAuthToken);
+  } else {
+    sessionStorage.removeItem('sigeu_token');
   }
+};
+
+export const clearAuthToken = () => {
+  setAuthToken('');
+};
+
+const getStoredToken = () => {
+  return runtimeAuthToken || sessionStorage.getItem('sigeu_token') || '';
 };
 
 const authHeaders = (baseHeaders = {}) => {
