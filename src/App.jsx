@@ -33,6 +33,10 @@ const FIELD_LIMITS = {
   location: 120,
 };
 
+const limitText = (value, maxLength) => {
+  return (value || '').slice(0, maxLength)
+}
+
 function App() {
   const [user, setUser] = useState(() => {
     return SigeuUser.fromStorage(localStorage.getItem('sigeu_user'))
@@ -252,9 +256,9 @@ function App() {
       for (const entidad of selectedEntities) {
         const payload = {
           ...emergencyForm,
-          title: emergencyForm.title.trim(),
-          description: emergencyForm.description.trim(),
-          location: emergencyForm.location.trim(),
+          title: limitText(emergencyForm.title.trim(), FIELD_LIMITS.title),
+          description: limitText(emergencyForm.description.trim(), FIELD_LIMITS.description),
+          location: limitText(emergencyForm.location.trim(), FIELD_LIMITS.location),
           targetEntity: entidad,
         };
         const res = await createEmergency(payload);
@@ -387,7 +391,7 @@ function App() {
 
       setEmergencyForm(prev => ({
         ...prev,
-        location: `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`
+        location: limitText(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`, FIELD_LIMITS.location)
       }));
     } catch (error) {
       const message = getLocationErrorMessage(error);
@@ -416,13 +420,14 @@ function App() {
       const base64String = reader.result;
       setImagePreview(base64String);
       setIsAnalyzing(true);
-      setEmergencyForm(prev => ({ ...prev, image: base64String, description: "Conectando con la IA..." }));
+      setEmergencyForm(prev => ({ ...prev, image: base64String, description: limitText("Conectando con la IA...", FIELD_LIMITS.description) }));
       try {
         const response = await analyzeIncidentImage(base64String);
         if (!response.ok) throw new Error("Error IA");
         const data = await response.json();
         const textoIA = data.descripcion || 'La IA no devolvió una descripción clara.';
         setEmergencyForm(prev => ({ ...prev, description: `[ANÁLISIS DE IA]: ${textoIA}` }));
+        setEmergencyForm(prev => ({ ...prev, description: limitText(prev.description, FIELD_LIMITS.description) }));
         const textoMayusculas = textoIA.toUpperCase();
         if (textoMayusculas.includes('NO ES NECESARIA') || textoMayusculas.includes('NINGUNA EMERGENCIA')) {
           setSelectedEntities([]);
@@ -739,6 +744,9 @@ function App() {
   const citizenInputClass = isCitizenDark ? 'border-slate-700 bg-slate-950 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:ring-cyan-900/60' : 'border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-100';
   const citizenLabelClass = isCitizenDark ? 'text-slate-300' : 'text-slate-500';
   const citizenMutedClass = isCitizenDark ? 'text-slate-400' : 'text-slate-400';
+  const titleCounterClass = emergencyForm.title.length >= FIELD_LIMITS.title ? 'text-red-500' : citizenLabelClass;
+  const locationCounterClass = emergencyForm.location.length >= FIELD_LIMITS.location ? 'text-red-500' : citizenLabelClass;
+  const descriptionCounterClass = emergencyForm.description.length >= FIELD_LIMITS.description ? 'text-red-500' : citizenMutedClass;
   const dashboard = new EmergencyDashboard(emergencies, user?.role);
   const entityStats = dashboard.stats;
   const groupedEmergencies = dashboard.groupByStatus(entitySearch, entityFilter);
@@ -819,12 +827,18 @@ function App() {
               <div className="space-y-6">
               <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
                 <label className="space-y-2">
-                  <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Asunto del reporte</span>
-                  <input type="text" placeholder="Ej. Accidente en la avenida" maxLength={FIELD_LIMITS.title} className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.title} onChange={e => setEmergencyForm({...emergencyForm, title: e.target.value})} required />
+                  <span className="flex items-center justify-between gap-3">
+                    <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Asunto del reporte</span>
+                    <span className={["text-[10px] font-black tabular-nums", titleCounterClass].join(" ")}>{emergencyForm.title.length}/{FIELD_LIMITS.title}</span>
+                  </span>
+                  <input type="text" placeholder="Ej. Accidente en la avenida" maxLength={FIELD_LIMITS.title} className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.title} onChange={e => setEmergencyForm({...emergencyForm, title: limitText(e.target.value, FIELD_LIMITS.title)})} required />
                 </label>
                 <label className="space-y-2">
-                  <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Coordenadas GPS</span>
-                  <input type="text" placeholder="Latitud, longitud" maxLength={FIELD_LIMITS.location} className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.location} onChange={e => setEmergencyForm({...emergencyForm, location: e.target.value})} required />
+                  <span className="flex items-center justify-between gap-3">
+                    <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Coordenadas GPS</span>
+                    <span className={["text-[10px] font-black tabular-nums", locationCounterClass].join(" ")}>{emergencyForm.location.length}/{FIELD_LIMITS.location}</span>
+                  </span>
+                  <input type="text" placeholder="Latitud, longitud" maxLength={FIELD_LIMITS.location} className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.location} onChange={e => setEmergencyForm({...emergencyForm, location: limitText(e.target.value, FIELD_LIMITS.location)})} required />
                 </label>
                 <button type="button" onClick={handleGetLocation} className={["flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl px-5 font-black uppercase text-white shadow-lg transition-all active:scale-95 lg:w-auto", isCitizenDark ? "bg-cyan-700 shadow-cyan-950/50 hover:bg-cyan-600" : "bg-slate-900 shadow-slate-300 hover:bg-blue-700"].join(" ")} title="Obtener ubicación GPS">
                   {isLocating ? <Loader2 className="animate-spin" size={20}/> : <Navigation size={20}/>}
@@ -837,6 +851,9 @@ function App() {
                     <span className="text-[10px] font-black uppercase text-blue-700">Análisis con IA</span>
                     <p className={["mt-1 text-xs font-semibold", citizenMutedClass].join(" ")}>Agrega una imagen para ayudar a priorizar la emergencia.</p>
                   </div>
+                  <span className={["text-[10px] font-black tabular-nums", descriptionCounterClass].join(" ")}>
+                    {emergencyForm.description.length}/{FIELD_LIMITS.description}
+                  </span>
                   <div className="flex flex-wrap gap-2">
                     <input type="file" accept="image/*" capture="environment" id="cameraInput" className="hidden" onChange={handleImageCapture} />
                     <label htmlFor="cameraInput" className="flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase text-white shadow-md shadow-blue-100 transition-all hover:bg-blue-700">
@@ -853,7 +870,7 @@ function App() {
                     <img src={imagePreview} className="h-44 w-full rounded-xl object-cover shadow-inner" alt="Evidencia" />
                   </div>
                 )}
-                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} required disabled={isAnalyzing}></textarea>
+                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required disabled={isAnalyzing}></textarea>
               </div>
               </div>
               <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
