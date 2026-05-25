@@ -4,6 +4,7 @@ export class SigeuUser {
     this.username = data.username || '';
     this.role = data.role || 'CITIZEN';
     this.name = data.name || data.fullName || '';
+    this.token = data.token || '';
   }
 
   static fromApi(data) {
@@ -40,6 +41,7 @@ export class SigeuUser {
       username: this.username,
       role: this.role,
       name: this.name,
+      token: this.token,
     };
   }
 }

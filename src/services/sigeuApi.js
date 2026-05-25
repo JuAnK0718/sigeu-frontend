@@ -2,11 +2,24 @@ import { AI_SERVICE_URL, API_URL } from '../config';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
+const getStoredToken = () => {
+  try {
+    return JSON.parse(localStorage.getItem('sigeu_user') || '{}').token || '';
+  } catch {
+    return '';
+  }
+};
+
+const authHeaders = (baseHeaders = {}) => {
+  const token = getStoredToken();
+  return token ? { ...baseHeaders, Authorization: `Bearer ${token}` } : baseHeaders;
+};
+
 export const fetchEmergenciesByTarget = (target) => {
   return fetch(`${API_URL}/emergencies?target=${target}&t=${Date.now()}`, {
     method: 'GET',
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache' },
+    headers: authHeaders({ 'Cache-Control': 'no-cache' }),
   });
 };
 
@@ -37,7 +50,7 @@ export const recoverUser = (recoverData) => {
 export const createEmergency = (emergencyData) => {
   return fetch(`${API_URL}/emergencies`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: authHeaders(jsonHeaders),
     body: JSON.stringify(emergencyData),
   });
 };
@@ -45,13 +58,16 @@ export const createEmergency = (emergencyData) => {
 export const updateEmergencyStatus = (id, status) => {
   return fetch(`${API_URL}/emergencies/${id}/status`, {
     method: 'PUT',
-    headers: jsonHeaders,
+    headers: authHeaders(jsonHeaders),
     body: JSON.stringify({ status }),
   });
 };
 
 export const deleteEmergencyById = (id) => {
-  return fetch(`${API_URL}/emergencies/${id}`, { method: 'DELETE' });
+  return fetch(`${API_URL}/emergencies/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
 };
 
 export const analyzeIncidentImage = (imageBase64) => {

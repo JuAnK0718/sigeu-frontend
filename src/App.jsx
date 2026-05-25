@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText } from 'lucide-react'
+import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText } from 'lucide-react'
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
 import { EmergencyDashboard, EmergencyReport } from './models/EmergencyReport'
 import { SigeuUser } from './models/SigeuUser'
@@ -23,6 +23,15 @@ const styles = `
   }
   .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
 `;
+
+const FIELD_LIMITS = {
+  username: 30,
+  password: 72,
+  name: 120,
+  title: 120,
+  description: 1000,
+  location: 120,
+};
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -62,6 +71,8 @@ function App() {
   const [entitySearch, setEntitySearch] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [isSendingReport, setIsSendingReport] = useState(false)
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false)
 
   const clearAuthFeedback = () => {
     setAuthError('')
@@ -477,11 +488,14 @@ function App() {
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="relative">
                     <User size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"/>
-                    <input type="text" placeholder="Usuario" className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, username: e.target.value})} required />
+                    <input type="text" placeholder="Usuario" maxLength={FIELD_LIMITS.username} className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, username: e.target.value})} required />
                   </div>
                   <div className="relative">
                     <Lock size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"/>
-                    <input type="password" placeholder="Contraseña" className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-5 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+                    <input type={showLoginPassword ? "text" : "password"} placeholder="Contraseña" maxLength={FIELD_LIMITS.password} className="w-full bg-white/5 border border-white/10 py-5 pl-12 pr-12 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-base" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+                    <button type="button" onClick={() => setShowLoginPassword(current => !current)} className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-all hover:bg-white/10 hover:text-white" aria-label={showLoginPassword ? "Ocultar password" : "Mostrar password"}>
+                      {showLoginPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                    </button>
                   </div>
                   <button type="submit" disabled={authLoading} className="w-full h-16 bg-cyan-600 p-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-3 shadow-lg hover:bg-cyan-500 transform active:scale-95 transition-all shadow-cyan-950 disabled:cursor-not-allowed disabled:opacity-70">
                     {authLoading ? 'INGRESANDO...' : 'INGRESAR'} {authLoading ? <Loader2 className="animate-spin" size={22}/> : <ArrowRight size={22}/>}
@@ -511,9 +525,9 @@ function App() {
                   errors.username = "Usa 4-15 caracteres (solo minúsculas, números o guión bajo).";
                 }
 
-                const passwordRegex = /^(?=.*[A-Z])[a-zA-Z0-9@#_.-]{8,20}$/;
+                const passwordRegex = /^(?=.*[A-Z])[a-zA-Z0-9@#_.-]{8,72}$/;
                 if (!passwordRegex.test(registerData.password)) {
-                  errors.password = "Debe tener 8-20 caracteres, al menos 1 mayúscula y sin símbolos raros.";
+                  errors.password = "Debe tener 8-72 caracteres, al menos 1 mayuscula y solo @ # _ . -";
                 }
 
                 if (Object.keys(errors).length > 0) {
@@ -561,6 +575,7 @@ function App() {
                   <input 
                     type="text" 
                     placeholder={registerData.role === 'CITIZEN' ? 'Ej. Juan Camilo Pérez' : 'Ej. Estación Central Sur'} 
+                    maxLength={FIELD_LIMITS.name}
                     className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-cyan-400 focus:bg-white/[0.08] text-white text-sm transition-all" 
                     onChange={e => setRegisterData({...registerData, fullName: e.target.value})} 
                     required 
@@ -575,6 +590,7 @@ function App() {
                   <input 
                     type="text" 
                     placeholder={registerData.role === 'CITIZEN' ? 'Ej. juancamilo_99' : 'Ej. pol_central_01'} 
+                    maxLength={15}
                     className={`w-full bg-white/5 border ${formErrors.username ? 'border-red-500' : 'border-white/10 focus:border-cyan-400'} p-4 rounded-2xl outline-none focus:bg-white/[0.08] text-white text-sm transition-all`}
                     onChange={e => {
                       setRegisterData({...registerData, username: e.target.value});
@@ -590,16 +606,22 @@ function App() {
                   <label className="text-slate-300 text-xs font-bold ml-1 uppercase tracking-wider">
                     {registerData.role === 'CITIZEN' ? 'Contraseña' : 'Clave de Acceso Institucional'}
                   </label>
-                  <input 
-                    type="password" 
-                    placeholder="••••••••" 
-                    className={`w-full bg-white/5 border ${formErrors.password ? 'border-red-500' : 'border-white/10 focus:border-cyan-400'} p-4 rounded-2xl outline-none focus:bg-white/[0.08] text-white text-sm transition-all`}
-                    onChange={e => {
-                      setRegisterData({...registerData, password: e.target.value});
-                      if(formErrors.password) setFormErrors({...formErrors, password: null});
-                    }} 
-                    required 
-                  />
+                  <div className="relative">
+                    <input 
+                      type={showRegisterPassword ? "text" : "password"} 
+                      placeholder="Password seguro" 
+                      maxLength={FIELD_LIMITS.password}
+                      className={`w-full bg-white/5 border ${formErrors.password ? 'border-red-500' : 'border-white/10 focus:border-cyan-400'} p-4 pr-12 rounded-2xl outline-none focus:bg-white/[0.08] text-white text-sm transition-all`}
+                      onChange={e => {
+                        setRegisterData({...registerData, password: e.target.value});
+                        if(formErrors.password) setFormErrors({...formErrors, password: null});
+                      }} 
+                      required 
+                    />
+                    <button type="button" onClick={() => setShowRegisterPassword(current => !current)} className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-all hover:bg-white/10 hover:text-white" aria-label={showRegisterPassword ? "Ocultar password" : "Mostrar password"}>
+                      {showRegisterPassword ? <EyeOff size={17}/> : <Eye size={17}/>}
+                    </button>
+                  </div>
                   {formErrors.password && <p className="text-red-400 text-[10px] ml-1 mt-1 leading-tight">{formErrors.password}</p>}
                 </div>
 
@@ -723,11 +745,11 @@ function App() {
               <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
                 <label className="space-y-2">
                   <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Asunto del reporte</span>
-                  <input type="text" placeholder="Ej. Accidente en la avenida" className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.title} onChange={e => setEmergencyForm({...emergencyForm, title: e.target.value})} required />
+                  <input type="text" placeholder="Ej. Accidente en la avenida" maxLength={FIELD_LIMITS.title} className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.title} onChange={e => setEmergencyForm({...emergencyForm, title: e.target.value})} required />
                 </label>
                 <label className="space-y-2">
                   <span className={["ml-1 text-[10px] font-black uppercase", citizenLabelClass].join(" ")}>Coordenadas GPS</span>
-                  <input type="text" placeholder="Latitud, longitud" className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.location} onChange={e => setEmergencyForm({...emergencyForm, location: e.target.value})} required />
+                  <input type="text" placeholder="Latitud, longitud" maxLength={FIELD_LIMITS.location} className={["w-full rounded-2xl border p-4 shadow-sm outline-none transition-all focus:ring-4", citizenInputClass].join(" ")} value={emergencyForm.location} onChange={e => setEmergencyForm({...emergencyForm, location: e.target.value})} required />
                 </label>
                 <button type="button" onClick={handleGetLocation} className={["flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl px-5 font-black uppercase text-white shadow-lg transition-all active:scale-95 lg:w-auto", isCitizenDark ? "bg-cyan-700 shadow-cyan-950/50 hover:bg-cyan-600" : "bg-slate-900 shadow-slate-300 hover:bg-blue-700"].join(" ")} title="Obtener ubicación GPS">
                   {isLocating ? <Loader2 className="animate-spin" size={20}/> : <Navigation size={20}/>}
@@ -756,7 +778,7 @@ function App() {
                     <img src={imagePreview} className="h-44 w-full rounded-xl object-cover shadow-inner" alt="Evidencia" />
                   </div>
                 )}
-                <textarea placeholder="Descripción del incidente..." className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} required disabled={isAnalyzing}></textarea>
+                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} required disabled={isAnalyzing}></textarea>
               </div>
               </div>
               <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
