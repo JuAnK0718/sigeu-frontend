@@ -73,6 +73,23 @@ function App() {
   const [isSendingReport, setIsSendingReport] = useState(false)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showRegisterPassword, setShowRegisterPassword] = useState(false)
+  const passwordRequirements = [
+    {
+      id: 'length',
+      label: '8 a 72 caracteres',
+      isValid: registerData.password.length >= 8 && registerData.password.length <= FIELD_LIMITS.password,
+    },
+    {
+      id: 'uppercase',
+      label: 'Al menos 1 letra mayuscula',
+      isValid: /[A-Z]/.test(registerData.password),
+    },
+    {
+      id: 'allowed',
+      label: 'Solo letras, numeros y @ # _ . -',
+      isValid: /^[a-zA-Z0-9@#_.-]*$/.test(registerData.password),
+    },
+  ]
 
   const clearAuthFeedback = () => {
     setAuthError('')
@@ -621,6 +638,17 @@ function App() {
                     <button type="button" onClick={() => setShowRegisterPassword(current => !current)} className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-all hover:bg-white/10 hover:text-white" aria-label={showRegisterPassword ? "Ocultar password" : "Mostrar password"}>
                       {showRegisterPassword ? <EyeOff size={17}/> : <Eye size={17}/>}
                     </button>
+                  </div>
+                  <div className="mt-2 grid gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                    {passwordRequirements.map(requirement => (
+                      <p
+                        key={requirement.id}
+                        className={`flex items-center gap-2 text-[10px] font-bold leading-tight ${requirement.isValid ? 'text-emerald-400' : 'text-slate-400'}`}
+                      >
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${requirement.isValid ? 'bg-emerald-400' : 'bg-slate-500'}`}></span>
+                        {requirement.label}
+                      </p>
+                    ))}
                   </div>
                   {formErrors.password && <p className="text-red-400 text-[10px] ml-1 mt-1 leading-tight">{formErrors.password}</p>}
                 </div>
