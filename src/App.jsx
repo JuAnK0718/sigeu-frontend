@@ -162,7 +162,23 @@ function App() {
       const res = await registerUser(registerData)
       if (res.ok) {
         setAuthSuccess('¡Cuenta creada con éxito! Ahora puedes iniciar sesión.')
-        setTimeout(() => goToView('LOGIN'), 2000)
+        const loginRes = await loginUser({
+          username: registerData.username,
+          password: registerData.password,
+        })
+
+        if (loginRes.ok) {
+          const userData = await loginRes.json()
+          const sessionUser = SigeuUser.fromApi(userData)
+
+          setUser(sessionUser)
+          setLoginRole(sessionUser.isCitizen() ? 'CITIZEN' : 'ENTITY')
+          localStorage.setItem('sigeu_user', JSON.stringify(sessionUser))
+          goToView('DASHBOARD')
+        } else {
+          setAuthSuccess('Cuenta creada. Inicia sesion con tu usuario y password.')
+          setView('LOGIN')
+        }
       } else {
         const errorText = await res.text()
         setAuthError(errorText || 'Error al crear la cuenta. El usuario podría ya existir.')
