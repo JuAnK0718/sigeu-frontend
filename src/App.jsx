@@ -51,7 +51,8 @@ const IMPORTANT_TEXT_SPLIT = /(Analisis de IA:|POLIC[ÍI]A|BOMBEROS?|HOSPITAL|AM
 const IMPORTANT_TEXT_MATCH = /^(Analisis de IA:|POLIC[ÍI]A|BOMBEROS?|HOSPITAL|AMBULANCIA|HERID[OA]S?|FUEGO|INCENDIO|LLAMAS|INMEDIATO|URGENTE|EMERGENCIA|RESCATE|ACCIDENTE|VIOLENCIA|PELIGRO|RIESGO)$/i
 
 const renderHighlightedDescription = (text, importantClass) => {
-  return text.split('\n').map((line, lineIndex) => (
+  const lines = text.split('\n')
+  return lines.map((line, lineIndex) => (
     <span key={`line-${lineIndex}`}>
       {line.split(IMPORTANT_TEXT_SPLIT).map((part, partIndex) => {
         if (!part) return null
@@ -60,9 +61,23 @@ const renderHighlightedDescription = (text, importantClass) => {
         }
         return <span key={`part-${lineIndex}-${partIndex}`}>{part}</span>
       })}
-      {lineIndex < text.split('\n').length - 1 && <br />}
+      {lineIndex < lines.length - 1 && <br />}
     </span>
   ))
+}
+
+const buildReportDescription = (aiDescription, additionalDescription) => {
+  const parts = []
+
+  if (aiDescription.trim()) {
+    parts.push(aiDescription.trim())
+  }
+
+  if (additionalDescription.trim()) {
+    parts.push(`Descripcion adicional:\n${additionalDescription.trim()}`)
+  }
+
+  return limitText(parts.join('\n\n'), FIELD_LIMITS.description)
 }
 
 function App() {
@@ -89,6 +104,7 @@ function App() {
   const [emergencyForm, setEmergencyForm] = useState({ 
     title: '', description: '', location: '', type: 'ACCIDENT', image: '' 
   })
+  const [aiDescription, setAiDescription] = useState('')
   const [selectedEntities, setSelectedEntities] = useState(['POLICIA'])
   const [citizenMode, setCitizenMode] = useState(() => localStorage.getItem('sigeu_citizen_mode') || 'light')
 
@@ -264,7 +280,7 @@ function App() {
   }
 
   const handleLogout = () => {
-    setUser(null); clearAuthToken(); localStorage.removeItem('sigeu_user'); goToView('LOGIN'); setImagePreview(null);
+    setUser(null); clearAuthToken(); localStorage.removeItem('sigeu_user'); goToView('LOGIN'); setImagePreview(null); setAiDescription('');
   }
 
   const showAppNotice = (message, type = 'warning') => {
@@ -277,6 +293,11 @@ function App() {
   const handleSend = async (e) => {
     e.preventDefault()
     if (selectedEntities.length === 0 || isSendingReport || isAnalyzing) return;
+    const reportDescription = buildReportDescription(aiDescription, emergencyForm.description)
+    if (!reportDescription) {
+      showAppNotice('Agrega una descripcion manual o una imagen para generar el analisis con IA.', 'warning');
+      return;
+    }
     setIsSendingReport(true)
     const failedDeliveries = [];
     let successfulDeliveries = 0;
@@ -285,7 +306,7 @@ function App() {
         const payload = {
           ...emergencyForm,
           title: limitText(emergencyForm.title.trim(), FIELD_LIMITS.title),
-          description: limitText(emergencyForm.description.trim(), FIELD_LIMITS.description),
+          description: reportDescription,
           location: limitText(emergencyForm.location.trim(), FIELD_LIMITS.location),
           targetEntity: entidad,
         };
@@ -313,6 +334,7 @@ function App() {
         allSent ? 'success' : 'warning'
       );
       setEmergencyForm({ title: '', description: '', location: '', type: 'ACCIDENT', image: '' }); setSelectedEntities(['POLICIA']); setImagePreview(null)
+      setAiDescription('')
     } else {
       showAppNotice(`No se pudo enviar el reporte. ${failedDeliveries.join(' | ') || 'El backend no respondio.'}`, 'error');
     }
@@ -432,7 +454,6 @@ function App() {
   const handleImageCapture = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
       showAppNotice('Selecciona un archivo de imagen válido.', 'warning');
       return;
@@ -443,18 +464,19 @@ function App() {
       return;
     }
 
+    setAiDescription('');
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result;
       setImagePreview(base64String);
       setIsAnalyzing(true);
-      setEmergencyForm(prev => ({ ...prev, image: base64String, description: limitText("Conectando con la IA...", FIELD_LIMITS.description) }));
+      setEmergencyForm(prev => ({ ...prev, image: base64String }));
       try {
         const response = await analyzeIncidentImage(base64String);
         if (!response.ok) throw new Error("Error IA");
         const data = await response.json();
         const textoIA = data.descripcion || 'La IA no devolvió una descripción clara.';
-        setEmergencyForm(prev => ({ ...prev, description: limitText(`Analisis de IA:\n${textoIA}`, FIELD_LIMITS.description) }));
+        setAiDescription(limitText(`Analisis de IA:\n${textoIA}`, FIELD_LIMITS.description));
         const textoMayusculas = textoIA.toUpperCase();
         if (textoMayusculas.includes('NO ES NECESARIA') || textoMayusculas.includes('NINGUNA EMERGENCIA')) {
           setSelectedEntities([]);
@@ -470,7 +492,7 @@ function App() {
           }
         }
       } catch {
-        setEmergencyForm(prev => ({ ...prev, description: "Error IA. Describe manualmente." }));
+        setAiDescription('');
         showAppNotice('No se pudo analizar la imagen con IA. Puedes continuar con la descripción manual.', 'warning');
       } finally { setIsAnalyzing(false); }
     };
@@ -899,12 +921,12 @@ function App() {
                     <img src={imagePreview} className="h-44 w-full rounded-xl object-cover shadow-inner" alt="Evidencia" />
                   </div>
                 )}
-                {emergencyForm.description.trim() && (
+                {aiDescription.trim() && (
                   <div className={["sigeu-report-textarea mt-5 rounded-2xl border p-5 shadow-inner", descriptionPreviewClass].join(" ")}>
-                    {renderHighlightedDescription(emergencyForm.description, importantDescriptionClass)}
+                    {renderHighlightedDescription(aiDescription, importantDescriptionClass)}
                   </div>
                 )}
-                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["sigeu-report-textarea mt-3 min-h-[180px] w-full rounded-2xl border p-5 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="6" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required disabled={isAnalyzing}></textarea>
+                <textarea placeholder={aiDescription ? "Descripción adicional para las entidades..." : "Descripción del incidente..."} maxLength={FIELD_LIMITS.description} className={["sigeu-report-textarea mt-3 min-h-[180px] w-full rounded-2xl border p-5 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="6" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required={!aiDescription.trim()} disabled={isAnalyzing}></textarea>
               </div>
               </div>
               <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
