@@ -899,12 +899,12 @@ function App() {
                     <img src={imagePreview} className="h-44 w-full rounded-xl object-cover shadow-inner" alt="Evidencia" />
                   </div>
                 )}
-                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["sigeu-report-textarea mt-5 min-h-[260px] w-full rounded-2xl border p-5 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required disabled={isAnalyzing}></textarea>
                 {emergencyForm.description.trim() && (
-                  <div className={["sigeu-report-textarea mt-3 rounded-2xl border p-5 shadow-inner", descriptionPreviewClass].join(" ")}>
+                  <div className={["sigeu-report-textarea mt-5 rounded-2xl border p-5 shadow-inner", descriptionPreviewClass].join(" ")}>
                     {renderHighlightedDescription(emergencyForm.description, importantDescriptionClass)}
                   </div>
                 )}
+                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["sigeu-report-textarea mt-3 min-h-[180px] w-full rounded-2xl border p-5 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="6" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required disabled={isAnalyzing}></textarea>
               </div>
               </div>
               <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
