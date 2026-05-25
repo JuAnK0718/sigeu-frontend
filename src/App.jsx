@@ -22,6 +22,16 @@ const styles = `
     to { opacity: 1; transform: translateY(0); }
   }
   .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+  .sigeu-report-textarea {
+    font-family: "Segoe UI", Inter, Roboto, Arial, sans-serif;
+    font-size: 0.96rem;
+    font-weight: 500;
+    line-height: 1.75;
+    letter-spacing: 0;
+  }
+  .sigeu-report-textarea::placeholder {
+    font-weight: 500;
+  }
 `;
 
 const FIELD_LIMITS = {
@@ -426,8 +436,7 @@ function App() {
         if (!response.ok) throw new Error("Error IA");
         const data = await response.json();
         const textoIA = data.descripcion || 'La IA no devolvió una descripción clara.';
-        setEmergencyForm(prev => ({ ...prev, description: `[ANÁLISIS DE IA]: ${textoIA}` }));
-        setEmergencyForm(prev => ({ ...prev, description: limitText(prev.description, FIELD_LIMITS.description) }));
+        setEmergencyForm(prev => ({ ...prev, description: limitText(`Analisis de IA:\n${textoIA}`, FIELD_LIMITS.description) }));
         const textoMayusculas = textoIA.toUpperCase();
         if (textoMayusculas.includes('NO ES NECESARIA') || textoMayusculas.includes('NINGUNA EMERGENCIA')) {
           setSelectedEntities([]);
@@ -870,7 +879,7 @@ function App() {
                     <img src={imagePreview} className="h-44 w-full rounded-xl object-cover shadow-inner" alt="Evidencia" />
                   </div>
                 )}
-                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["mt-5 min-h-[260px] w-full rounded-2xl border p-4 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required disabled={isAnalyzing}></textarea>
+                <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["sigeu-report-textarea mt-5 min-h-[260px] w-full rounded-2xl border p-5 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required disabled={isAnalyzing}></textarea>
               </div>
               </div>
               <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
