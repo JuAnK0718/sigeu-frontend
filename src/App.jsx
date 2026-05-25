@@ -47,6 +47,24 @@ const limitText = (value, maxLength) => {
   return (value || '').slice(0, maxLength)
 }
 
+const IMPORTANT_TEXT_SPLIT = /(Analisis de IA:|POLIC[ÍI]A|BOMBEROS?|HOSPITAL|AMBULANCIA|HERID[OA]S?|FUEGO|INCENDIO|LLAMAS|INMEDIATO|URGENTE|EMERGENCIA|RESCATE|ACCIDENTE|VIOLENCIA|PELIGRO|RIESGO)/gi
+const IMPORTANT_TEXT_MATCH = /^(Analisis de IA:|POLIC[ÍI]A|BOMBEROS?|HOSPITAL|AMBULANCIA|HERID[OA]S?|FUEGO|INCENDIO|LLAMAS|INMEDIATO|URGENTE|EMERGENCIA|RESCATE|ACCIDENTE|VIOLENCIA|PELIGRO|RIESGO)$/i
+
+const renderHighlightedDescription = (text, importantClass) => {
+  return text.split('\n').map((line, lineIndex) => (
+    <span key={`line-${lineIndex}`}>
+      {line.split(IMPORTANT_TEXT_SPLIT).map((part, partIndex) => {
+        if (!part) return null
+        if (IMPORTANT_TEXT_MATCH.test(part)) {
+          return <strong key={`part-${lineIndex}-${partIndex}`} className={importantClass}>{part}</strong>
+        }
+        return <span key={`part-${lineIndex}-${partIndex}`}>{part}</span>
+      })}
+      {lineIndex < text.split('\n').length - 1 && <br />}
+    </span>
+  ))
+}
+
 function App() {
   const [user, setUser] = useState(() => {
     return SigeuUser.fromStorage(localStorage.getItem('sigeu_user'))
@@ -756,6 +774,8 @@ function App() {
   const titleCounterClass = emergencyForm.title.length >= FIELD_LIMITS.title ? 'text-red-500' : citizenLabelClass;
   const locationCounterClass = emergencyForm.location.length >= FIELD_LIMITS.location ? 'text-red-500' : citizenLabelClass;
   const descriptionCounterClass = emergencyForm.description.length >= FIELD_LIMITS.description ? 'text-red-500' : citizenMutedClass;
+  const descriptionPreviewClass = isCitizenDark ? 'border-cyan-900/50 bg-cyan-950/20 text-slate-100' : 'border-blue-100 bg-blue-50/80 text-slate-800';
+  const importantDescriptionClass = isCitizenDark ? 'font-black text-cyan-200' : 'font-black text-slate-950';
   const dashboard = new EmergencyDashboard(emergencies, user?.role);
   const entityStats = dashboard.stats;
   const groupedEmergencies = dashboard.groupByStatus(entitySearch, entityFilter);
@@ -880,6 +900,11 @@ function App() {
                   </div>
                 )}
                 <textarea placeholder="Descripción del incidente..." maxLength={FIELD_LIMITS.description} className={["sigeu-report-textarea mt-5 min-h-[260px] w-full rounded-2xl border p-5 outline-none transition-all focus:ring-4", citizenInputClass, isAnalyzing ? "opacity-50 animate-pulse" : ""].join(" ")} rows="8" value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: limitText(e.target.value, FIELD_LIMITS.description)})} required disabled={isAnalyzing}></textarea>
+                {emergencyForm.description.trim() && (
+                  <div className={["sigeu-report-textarea mt-3 rounded-2xl border p-5 shadow-inner", descriptionPreviewClass].join(" ")}>
+                    {renderHighlightedDescription(emergencyForm.description, importantDescriptionClass)}
+                  </div>
+                )}
               </div>
               </div>
               <div className="space-y-5 xl:sticky xl:top-28 xl:self-start">
