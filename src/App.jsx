@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText, Bot, Users, Truck, Ambulance, TimerReset } from 'lucide-react'
+import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText, Bot, Users, Truck, Ambulance, TimerReset, Plus } from 'lucide-react'
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
 import { EmergencyDashboard, EmergencyReport } from './models/EmergencyReport'
 import { SigeuUser } from './models/SigeuUser'
-import { analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, fetchResourceSummary, loginUser, recoverUser, registerUser, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
+import { addResourceUnits, analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, fetchResourceSummary, loginUser, recoverUser, registerUser, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
 import { formatEmergencyTime, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig } from './utils/emergencies'
 
 const styles = `
@@ -145,6 +145,8 @@ function App() {
   const [entityFilter, setEntityFilter] = useState('ALL')
   const [entitySearch, setEntitySearch] = useState('')
   const [resourceSummary, setResourceSummary] = useState(null)
+  const [resourceAddUnits, setResourceAddUnits] = useState(1)
+  const [isAddingResources, setIsAddingResources] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
   const [isSendingReport, setIsSendingReport] = useState(false)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
@@ -387,6 +389,41 @@ function App() {
       }
     } catch {
       showAppNotice('No se pudo conectar con el servidor para actualizar el incidente.', 'error');
+    }
+  }
+
+  const handleAddResources = async (e) => {
+    e.preventDefault()
+    if (!user || user.role === 'CITIZEN') return
+
+    const units = Number(resourceAddUnits)
+    if (!Number.isInteger(units) || units < 1) {
+      showAppNotice('Agrega una cantidad valida de recursos.', 'warning')
+      return
+    }
+
+    setIsAddingResources(true)
+    try {
+      const res = await addResourceUnits(user.role, units)
+      if (res.ok) {
+        const summary = await res.json()
+        setResourceSummary(summary)
+        setResourceAddUnits(1)
+
+        const emergenciesRes = await fetchEmergenciesByTarget(user.role)
+        if (emergenciesRes.ok) {
+          setEmergencies(await emergenciesRes.json())
+        }
+
+        showAppNotice(`Se agregaron ${units} recursos operativos.`, 'success')
+      } else {
+        const errorText = await res.text()
+        showAppNotice(errorText || 'No se pudieron agregar recursos.', 'error')
+      }
+    } catch {
+      showAppNotice('No se pudo conectar con el backend para agregar recursos.', 'error')
+    } finally {
+      setIsAddingResources(false)
     }
   }
 
@@ -857,10 +894,14 @@ function App() {
   const resourceIcon = user?.role === 'HOSPITAL' ? <Ambulance size={20}/> : user?.role === 'BOMBEROS' ? <Truck size={20}/> : <Users size={20}/>;
   const resourceDefaults = RESOURCE_DEFAULTS[user?.role] || RESOURCE_DEFAULTS.POLICIA;
   const resourceUnitName = resourceSummary?.unitName || resourceDefaults.unitName;
-  const resourceTotal = resourceSummary?.totalUnits ?? resourceDefaults.totalUnits;
+  const resourceTotal = resourceSummary?.totalUnits ?? 0;
   const resourceUsed = resourceSummary?.usedUnits ?? 0;
   const resourceAvailable = resourceSummary?.availableUnits ?? Math.max(resourceTotal - resourceUsed, 0);
   const resourceUsagePercent = resourceTotal ? Math.min(Math.round((resourceUsed / resourceTotal) * 100), 100) : 0;
+  const resourceDailyLimit = resourceSummary?.dailyAddLimit ?? 10;
+  const resourceDailyAdded = resourceSummary?.dailyAddedUnits ?? 0;
+  const resourceRemainingDailyAdd = resourceSummary?.remainingDailyAdd ?? Math.max(resourceDailyLimit - resourceDailyAdded, 0);
+  const resourceInputMax = Math.max(resourceRemainingDailyAdd, 1);
   const detailReport = detailTarget ? EmergencyReport.fromApi(detailTarget, user?.role) : null;
   const detailCoordinates = detailReport ? detailReport.coordinates : null;
   const detailStatus = detailReport ? getStatusConfig(detailReport.status) : null;
@@ -1057,23 +1098,49 @@ function App() {
 
             <section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                      {resourceIcon}
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-black uppercase text-slate-400">Recursos operativos</p>
-                      <h4 className="text-xl font-black text-slate-900">{resourceAvailable} disponibles</h4>
-                      <p className="text-xs font-bold text-slate-500">{resourceUsed} ocupados de {resourceTotal} {resourceUnitName}</p>
+                <div className="space-y-5">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                        {resourceIcon}
+                      </span>
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-slate-400">Recursos operativos</p>
+                        <h4 className="text-xl font-black text-slate-900">{resourceAvailable} disponibles</h4>
+                        <p className="text-xs font-bold text-slate-500">{resourceUsed} ocupados de {resourceTotal} {resourceUnitName}</p>
+                      </div>
+                    </div>
+                    <div className="min-w-[180px]">
+                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${resourceUsagePercent}%` }}></div>
+                      </div>
+                      <p className="mt-2 text-right text-[10px] font-black uppercase text-slate-400">{resourceUsagePercent}% en uso</p>
                     </div>
                   </div>
-                  <div className="min-w-[180px]">
-                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${resourceUsagePercent}%` }}></div>
-                    </div>
-                    <p className="mt-2 text-right text-[10px] font-black uppercase text-slate-400">{resourceUsagePercent}% en uso</p>
-                  </div>
+                  <form onSubmit={handleAddResources} className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-end">
+                    <label className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black uppercase text-slate-400">Agregar personal hoy</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max={resourceInputMax}
+                        value={resourceAddUnits}
+                        onChange={e => setResourceAddUnits(Math.max(1, Math.min(Number(e.target.value) || 1, resourceInputMax)))}
+                        className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-900 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                        disabled={resourceRemainingDailyAdd <= 0 || isAddingResources}
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={resourceRemainingDailyAdd <= 0 || isAddingResources}
+                      className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isAddingResources ? <Loader2 className="animate-spin" size={15}/> : <Plus size={15}/>} Agregar
+                    </button>
+                  </form>
+                  <p className="text-[10px] font-black uppercase text-slate-400">
+                    Limite diario: {resourceDailyAdded}/{resourceDailyLimit}. Restan {resourceRemainingDailyAdd} {resourceUnitName}.
+                  </p>
                 </div>
               </div>
               <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5 shadow-sm">
