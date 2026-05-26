@@ -43,8 +43,35 @@ const FIELD_LIMITS = {
   location: 120,
 };
 
+const RESOURCE_DEFAULTS = {
+  POLICIA: { totalUnits: 30, unitName: 'policias' },
+  HOSPITAL: { totalUnits: 15, unitName: 'ambulancias' },
+  BOMBEROS: { totalUnits: 8, unitName: 'camiones' },
+}
+
 const limitText = (value, maxLength) => {
   return (value || '').slice(0, maxLength)
+}
+
+const hasHospitalSignal = (text) => {
+  const normalized = text.toLowerCase()
+  return /hospital|ambulancia|medic|herid|inconsciente|sin respuesta|no responde|desmay/.test(normalized)
+}
+
+const hasMultipleCasualties = (text) => {
+  const normalized = text.toLowerCase()
+  return /(varios|varias|multiples|múltiples|muchos|muchas|personas heridas|heridos|lesionados|victimas|víctimas|accidentados|mas de|más de|\b[2-9]\b)/.test(normalized)
+}
+
+const buildOperationalAiDescription = (text) => {
+  const cleanText = String(text || '').trim()
+  if (!hasHospitalSignal(cleanText)) return cleanText
+
+  const criterion = hasMultipleCasualties(cleanText)
+    ? 'Criterio operativo:\nPersonas afectadas estimadas: varias personas. Puede requerir varias ambulancias.'
+    : 'Criterio operativo:\nPersonas afectadas estimadas: una persona. Solicitar 1 ambulancia salvo que se reporten mas heridos.'
+
+  return `${cleanText}\n\n${criterion}`
 }
 
 const IMPORTANT_TEXT_SPLIT = /(Analisis de IA:|POLIC[ÍI]A|BOMBEROS?|HOSPITAL|AMBULANCIA|HERID[OA]S?|FUEGO|INCENDIO|LLAMAS|INMEDIATO|URGENTE|EMERGENCIA|RESCATE|ACCIDENTE|VIOLENCIA|PELIGRO|RIESGO)/gi
@@ -485,7 +512,8 @@ function App() {
         if (!response.ok) throw new Error("Error IA");
         const data = await response.json();
         const textoIA = data.descripcion || 'La IA no devolvió una descripción clara.';
-        setAiDescription(limitText(`Analisis de IA:\n${textoIA}`, FIELD_LIMITS.description));
+        const textoOperativo = buildOperationalAiDescription(textoIA);
+        setAiDescription(limitText(`Analisis de IA:\n${textoOperativo}`, FIELD_LIMITS.description));
         const textoMayusculas = textoIA.toUpperCase();
         if (textoMayusculas.includes('NO ES NECESARIA') || textoMayusculas.includes('NINGUNA EMERGENCIA')) {
           setSelectedEntities([]);
@@ -827,10 +855,11 @@ function App() {
     { id: 'RESOLVED', title: 'Resueltas', icon: <CheckCircle size={16}/>, tone: 'border-emerald-200 bg-emerald-50/70 text-emerald-700' }
   ];
   const resourceIcon = user?.role === 'HOSPITAL' ? <Ambulance size={20}/> : user?.role === 'BOMBEROS' ? <Truck size={20}/> : <Users size={20}/>;
-  const resourceUnitName = resourceSummary?.unitName || (user?.role === 'HOSPITAL' ? 'ambulancias' : user?.role === 'BOMBEROS' ? 'camiones' : 'policias');
-  const resourceTotal = resourceSummary?.totalUnits ?? 0;
+  const resourceDefaults = RESOURCE_DEFAULTS[user?.role] || RESOURCE_DEFAULTS.POLICIA;
+  const resourceUnitName = resourceSummary?.unitName || resourceDefaults.unitName;
+  const resourceTotal = resourceSummary?.totalUnits ?? resourceDefaults.totalUnits;
   const resourceUsed = resourceSummary?.usedUnits ?? 0;
-  const resourceAvailable = resourceSummary?.availableUnits ?? 0;
+  const resourceAvailable = resourceSummary?.availableUnits ?? Math.max(resourceTotal - resourceUsed, 0);
   const resourceUsagePercent = resourceTotal ? Math.min(Math.round((resourceUsed / resourceTotal) * 100), 100) : 0;
   const detailReport = detailTarget ? EmergencyReport.fromApi(detailTarget, user?.role) : null;
   const detailCoordinates = detailReport ? detailReport.coordinates : null;
