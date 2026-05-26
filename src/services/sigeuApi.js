@@ -34,6 +34,14 @@ export const fetchEmergenciesByTarget = (target) => {
   });
 };
 
+export const fetchResourceSummary = (target) => {
+  return fetch(`${API_URL}/emergencies/resources?target=${target}&t=${Date.now()}`, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: authHeaders({ 'Cache-Control': 'no-cache' }),
+  });
+};
+
 export const loginUser = (credentials) => {
   return fetch(`${API_URL}/auth/login`, {
     method: 'POST',

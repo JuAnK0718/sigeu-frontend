@@ -11,6 +11,13 @@ export class EmergencyReport {
     this.targetEntity = data.targetEntity || '';
     this.image = data.image || '';
     this.createdAt = data.createdAt || null;
+    this.assignedUnits = data.assignedUnits ?? 0;
+    this.resourceLabel = data.resourceLabel || '';
+    this.estimatedResolveMinutes = data.estimatedResolveMinutes ?? null;
+    this.operationalNote = data.operationalNote || '';
+    this.autoStartedAt = data.autoStartedAt || null;
+    this.autoResolveAt = data.autoResolveAt || null;
+    this.autoDeleteAt = data.autoDeleteAt || null;
     this.viewerRole = viewerRole;
   }
 
@@ -48,12 +55,16 @@ export class EmergencyReport {
     return this.status === 'RESOLVED';
   }
 
+  get isWaiting() {
+    return this.status === 'WAITING';
+  }
+
   get isPending() {
-    return !this.isInProgress && !this.isResolved;
+    return this.status === 'PENDING';
   }
 
   get searchText() {
-    return `${this.title} ${this.description} ${this.location} ${this.type}`.toLowerCase();
+    return `${this.title} ${this.description} ${this.location} ${this.type} ${this.operationalNote}`.toLowerCase();
   }
 
   matchesSearch(searchTerm) {
@@ -84,6 +95,13 @@ export class EmergencyReport {
       targetEntity: this.targetEntity,
       image: this.image,
       createdAt: this.createdAt,
+      assignedUnits: this.assignedUnits,
+      resourceLabel: this.resourceLabel,
+      estimatedResolveMinutes: this.estimatedResolveMinutes,
+      operationalNote: this.operationalNote,
+      autoStartedAt: this.autoStartedAt,
+      autoResolveAt: this.autoResolveAt,
+      autoDeleteAt: this.autoDeleteAt,
     };
   }
 }
@@ -97,6 +115,7 @@ export class EmergencyDashboard {
     return {
       total: this.items.length,
       pending: this.items.filter(item => item.isPending).length,
+      waiting: this.items.filter(item => item.isWaiting).length,
       progress: this.items.filter(item => item.isInProgress).length,
       resolved: this.items.filter(item => item.isResolved).length,
       high: this.items.filter(item => item.priority.label === 'Alta').length,
@@ -114,6 +133,7 @@ export class EmergencyDashboard {
 
     return {
       PENDING: filteredItems.filter(item => item.isPending),
+      WAITING: filteredItems.filter(item => item.isWaiting),
       IN_PROGRESS: filteredItems.filter(item => item.isInProgress),
       RESOLVED: filteredItems.filter(item => item.isResolved),
     };

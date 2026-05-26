@@ -40,6 +40,8 @@ export const getEmergencyPriority = (emergency, role) => {
 
 export const getStatusConfig = (status) => {
   switch (status) {
+    case 'WAITING':
+      return { label: 'En espera', className: 'bg-sky-100 text-sky-700 border-sky-200', dot: 'bg-sky-500' };
     case 'RESOLVED':
       return { label: 'Resuelto', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
     case 'IN_PROGRESS':

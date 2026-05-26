@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText } from 'lucide-react'
+import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText, Bot, Users, Truck, Ambulance, TimerReset } from 'lucide-react'
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
 import { EmergencyDashboard, EmergencyReport } from './models/EmergencyReport'
 import { SigeuUser } from './models/SigeuUser'
-import { analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, loginUser, recoverUser, registerUser, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
+import { analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, fetchResourceSummary, loginUser, recoverUser, registerUser, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
 import { formatEmergencyTime, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig } from './utils/emergencies'
 
 const styles = `
@@ -117,6 +117,7 @@ function App() {
   const [detailTarget, setDetailTarget] = useState(null)
   const [entityFilter, setEntityFilter] = useState('ALL')
   const [entitySearch, setEntitySearch] = useState('')
+  const [resourceSummary, setResourceSummary] = useState(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [isSendingReport, setIsSendingReport] = useState(false)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
@@ -166,10 +167,17 @@ function App() {
     if (view === 'DASHBOARD' && user?.role !== 'CITIZEN') {
       const fetchEmergencies = async () => {
         try {
-          const res = await fetchEmergenciesByTarget(user.role);
+          const [res, resourcesRes] = await Promise.all([
+            fetchEmergenciesByTarget(user.role),
+            fetchResourceSummary(user.role),
+          ]);
           if (res.ok) {
             const data = await res.json();
             setEmergencies(data);
+          }
+          if (resourcesRes.ok) {
+            const resources = await resourcesRes.json();
+            setResourceSummary(resources);
           }
         } catch (error) {
           console.error(error);
@@ -344,8 +352,9 @@ function App() {
     try {
       const res = await updateEmergencyStatus(id, newStatus)
       if (res.ok) {
-        setEmergencies(current => current.map(em => em.id === id ? { ...em, status: newStatus } : em))
-        setDetailTarget(current => current?.id === id ? EmergencyReport.fromApi(current, user?.role).withStatus(newStatus) : current)
+        const updatedEmergency = await res.json()
+        setEmergencies(current => current.map(em => em.id === id ? updatedEmergency : em))
+        setDetailTarget(current => current?.id === id ? updatedEmergency : current)
       } else {
         showAppNotice('No se pudo actualizar el estado del incidente.', 'error');
       }
@@ -804,6 +813,7 @@ function App() {
   const entityFilterOptions = [
     { id: 'ALL', label: 'Todos', count: entityStats.total },
     { id: 'PENDING', label: 'Nuevas', count: entityStats.pending },
+    { id: 'WAITING', label: 'En espera', count: entityStats.waiting },
     { id: 'IN_PROGRESS', label: 'En atención', count: entityStats.progress },
     { id: 'RESOLVED', label: 'Resueltas', count: entityStats.resolved },
     { id: 'HIGH', label: 'Prioridad alta', count: entityStats.high },
@@ -812,9 +822,16 @@ function App() {
   ];
   const entityColumns = [
     { id: 'PENDING', title: 'Nuevas alertas', icon: <Radio size={16}/>, tone: 'border-red-200 bg-red-50/70 text-red-700' },
+    { id: 'WAITING', title: 'En espera', icon: <TimerReset size={16}/>, tone: 'border-sky-200 bg-sky-50/70 text-sky-700' },
     { id: 'IN_PROGRESS', title: 'En atención', icon: <Clock size={16}/>, tone: 'border-amber-200 bg-amber-50/70 text-amber-700' },
     { id: 'RESOLVED', title: 'Resueltas', icon: <CheckCircle size={16}/>, tone: 'border-emerald-200 bg-emerald-50/70 text-emerald-700' }
   ];
+  const resourceIcon = user?.role === 'HOSPITAL' ? <Ambulance size={20}/> : user?.role === 'BOMBEROS' ? <Truck size={20}/> : <Users size={20}/>;
+  const resourceUnitName = resourceSummary?.unitName || (user?.role === 'HOSPITAL' ? 'ambulancias' : user?.role === 'BOMBEROS' ? 'camiones' : 'policias');
+  const resourceTotal = resourceSummary?.totalUnits ?? 0;
+  const resourceUsed = resourceSummary?.usedUnits ?? 0;
+  const resourceAvailable = resourceSummary?.availableUnits ?? 0;
+  const resourceUsagePercent = resourceTotal ? Math.min(Math.round((resourceUsed / resourceTotal) * 100), 100) : 0;
   const detailReport = detailTarget ? EmergencyReport.fromApi(detailTarget, user?.role) : null;
   const detailCoordinates = detailReport ? detailReport.coordinates : null;
   const detailStatus = detailReport ? getStatusConfig(detailReport.status) : null;
@@ -987,10 +1004,14 @@ function App() {
                       Gestiona alertas nuevas, reportes en atención y casos resueltos desde una sola vista.
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                     <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
                       <p className="text-2xl font-black">{entityStats.pending}</p>
                       <p className="mt-1 text-[10px] font-black uppercase text-white/70">Nuevas</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                      <p className="text-2xl font-black">{entityStats.waiting}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-white/70">Espera</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
                       <p className="text-2xl font-black">{entityStats.progress}</p>
@@ -1005,10 +1026,47 @@ function App() {
               </div>
             </section>
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                      {resourceIcon}
+                    </span>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-400">Recursos operativos</p>
+                      <h4 className="text-xl font-black text-slate-900">{resourceAvailable} disponibles</h4>
+                      <p className="text-xs font-bold text-slate-500">{resourceUsed} ocupados de {resourceTotal} {resourceUnitName}</p>
+                    </div>
+                  </div>
+                  <div className="min-w-[180px]">
+                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${resourceUsagePercent}%` }}></div>
+                    </div>
+                    <p className="mt-2 text-right text-[10px] font-black uppercase text-slate-400">{resourceUsagePercent}% en uso</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
+                    <Bot size={20}/>
+                  </span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-blue-700">IA operativa</p>
+                    <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
+                      Asigna recursos, atiende casos con cupo, deja alertas en espera y libera unidades al resolver.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
               {[
                 { label: 'Total', value: entityStats.total, icon: <Layers size={18}/>, color: 'text-slate-700 bg-slate-100' },
                 { label: 'Nuevas', value: entityStats.pending, icon: <Radio size={18}/>, color: 'text-red-700 bg-red-100' },
+                { label: 'En espera', value: entityStats.waiting, icon: <TimerReset size={18}/>, color: 'text-sky-700 bg-sky-100' },
                 { label: 'En atención', value: entityStats.progress, icon: <Clock size={18}/>, color: 'text-amber-700 bg-amber-100' },
                 { label: 'Alta prioridad', value: entityStats.high, icon: <AlertTriangle size={18}/>, color: 'text-red-700 bg-red-100' },
                 { label: 'Con evidencia', value: entityStats.image, icon: <Image size={18}/>, color: 'text-blue-700 bg-blue-100' }
@@ -1050,7 +1108,7 @@ function App() {
               </div>
             </section>
 
-            <section className="grid gap-5 xl:grid-cols-3">
+            <section className="grid gap-5 xl:grid-cols-4">
               {entityColumns.map(column => (
                 <div key={column.id} className="min-h-[280px] rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className={["mb-4 flex items-center justify-between rounded-2xl border px-4 py-3", column.tone].join(" ")}>
@@ -1087,7 +1145,11 @@ function App() {
                               </span>
                               {em.image && <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-blue-700"><Image size={11}/> Evidencia</span>}
                               {em.coordinates && <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase text-cyan-700"><MapPin size={11}/> Mapa</span>}
+                              {em.assignedUnits > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-600"><Users size={11}/> {em.assignedUnits} {em.resourceLabel || resourceUnitName}</span>}
                             </div>
+                            {em.operationalNote && (
+                              <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold leading-relaxed text-blue-800">{em.operationalNote}</p>
+                            )}
                             <div className="mt-4 grid grid-cols-2 gap-2">
                               <button type="button" onClick={() => setDetailTarget(em)} className="rounded-xl bg-slate-900 p-3 text-xs font-black uppercase text-white transition-all hover:bg-slate-700">Detalle</button>
                               {em.coordinates ? (
@@ -1187,6 +1249,11 @@ function App() {
                       <span className={["h-2 w-2 rounded-full", detailPriority.dot].join(" ")}></span>Prioridad {detailPriority.label}
                     </span>
                   )}
+                  {detailReport?.assignedUnits > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase text-white">
+                      <Users size={12}/> {detailReport.assignedUnits} {detailReport.resourceLabel || resourceUnitName}
+                    </span>
+                  )}
                 </div>
               </div>
               <button type="button" onClick={() => setDetailTarget(null)} className="rounded-xl bg-white/10 p-2 text-white transition-all hover:bg-white/20">
@@ -1200,6 +1267,30 @@ function App() {
                   <p className="text-[10px] font-black uppercase text-slate-400">Descripción</p>
                   <p className="mt-3 text-sm font-medium leading-relaxed text-slate-700">"{detailTarget.description}"</p>
                 </div>
+                {detailReport?.operationalNote && (
+                  <div className="rounded-3xl border border-blue-100 bg-blue-50 p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
+                        <Bot size={17}/>
+                      </span>
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-blue-700">IA operativa</p>
+                        <p className="mt-2 text-sm font-bold leading-relaxed text-blue-950">{detailReport.operationalNote}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-2 text-xs font-bold text-blue-900">
+                      {detailReport.autoStartedAt && (
+                        <p className="flex items-center gap-2"><Clock size={14}/> Atención iniciada: {formatEmergencyTime(detailReport.autoStartedAt)}</p>
+                      )}
+                      {detailReport.autoResolveAt && (
+                        <p className="flex items-center gap-2"><CheckCircle size={14}/> Resolución estimada: {formatEmergencyTime(detailReport.autoResolveAt)}</p>
+                      )}
+                      {detailReport.autoDeleteAt && (
+                        <p className="flex items-center gap-2"><TimerReset size={14}/> Borrado automático: {formatEmergencyTime(detailReport.autoDeleteAt)}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="rounded-3xl border border-slate-200 bg-white p-5">
                   <p className="text-[10px] font-black uppercase text-slate-400">Ubicación</p>
                   <p className="mt-3 flex items-start gap-2 text-sm font-bold text-slate-700"><MapPin size={16} className="mt-0.5 shrink-0 text-red-600"/> {detailTarget.location || 'Sin ubicación'}</p>
