@@ -143,6 +143,7 @@ function App() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [detailTarget, setDetailTarget] = useState(null)
   const [entityFilter, setEntityFilter] = useState('ALL')
+  const [entityPanel, setEntityPanel] = useState('REPORTS')
   const [entitySearch, setEntitySearch] = useState('')
   const [resourceSummary, setResourceSummary] = useState(null)
   const [resourceAddUnits, setResourceAddUnits] = useState(1)
@@ -948,6 +949,12 @@ function App() {
   const resourceRemainingDailyRemove = resourceSummary?.remainingDailyRemove ?? Math.max(resourceDailyRemoveLimit - resourceDailyRemoved, 0);
   const resourceRemovableToday = Math.min(resourceAvailable, resourceRemainingDailyRemove);
   const resourceRemoveInputMax = Math.max(resourceRemovableToday, 1);
+  const entityPanelOptions = [
+    { id: 'REPORTS', label: 'Reportes', count: entityStats.total, icon: <Layers size={18}/> },
+    { id: 'RESOURCES', label: 'Recursos', count: resourceAvailable, icon: resourceIcon },
+    { id: 'STAFF', label: 'Personal', count: resourceTotal, icon: <Users size={18}/> },
+    { id: 'AI', label: 'IA operativa', count: entityStats.waiting + entityStats.progress, icon: <Bot size={18}/> },
+  ];
   const activeDetailReport = sortedEntityReports.find(item => item.id === detailTarget?.id) || sortedEntityReports[0] || null;
   const activeDetailStatus = activeDetailReport ? getStatusConfig(activeDetailReport.status) : null;
   const activeDetailPriority = activeDetailReport ? activeDetailReport.priority : null;
@@ -1146,8 +1153,31 @@ function App() {
               </div>
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,.95fr)_minmax(360px,.75fr)]">
-              <div className="space-y-4">
+            <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                {entityPanelOptions.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setEntityPanel(option.id)}
+                    className={["flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all", entityPanel === option.id ? `${theme.panel} border-transparent text-white shadow-lg` : "border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-white"].join(" ")}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className={["flex h-10 w-10 items-center justify-center rounded-xl", entityPanel === option.id ? "bg-white/15 text-white" : "bg-white text-slate-500"].join(" ")}>
+                        {option.icon}
+                      </span>
+                      <span className="text-xs font-black uppercase">{option.label}</span>
+                    </span>
+                    <span className={["rounded-full px-2.5 py-1 text-xs font-black", entityPanel === option.id ? "bg-white/15 text-white" : "bg-white text-slate-900"].join(" ")}>
+                      {option.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {entityPanel === 'RESOURCES' && (
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.45fr)]">
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
@@ -1185,29 +1215,32 @@ function App() {
 
                 <div className={["rounded-3xl border p-5 shadow-sm", theme.border, theme.soft].join(" ")}>
                   <div className="flex items-start gap-3">
-                    <span className={["flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white", theme.button].join(" ")}>
-                      <Bot size={20}/>
+                    <span className={["flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white", theme.panel].join(" ")}>
+                      {resourceIcon}
                     </span>
                     <div>
-                      <p className={["text-[10px] font-black uppercase", theme.accent].join(" ")}>IA operativa</p>
+                      <p className={["text-[10px] font-black uppercase", theme.accent].join(" ")}>Capacidad diaria</p>
                       <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
-                        Asigna recursos, deja casos en espera si no hay cupo y libera unidades al resolver.
+                        Controla cuantos recursos entran y salen durante el dia para evitar cambios excesivos.
                       </p>
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-3">
                     <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
-                      <p className="text-2xl font-black text-slate-900">{entityStats.waiting}</p>
-                      <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Esperando cupo</p>
+                      <p className="text-2xl font-black text-slate-900">{resourceRemainingDailyAdd}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Ingresos restantes</p>
                     </div>
                     <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
-                      <p className="text-2xl font-black text-slate-900">{entityStats.progress}</p>
-                      <p className="mt-1 text-[10px] font-black uppercase text-slate-500">En atencion</p>
+                      <p className="text-2xl font-black text-slate-900">{resourceRemovableToday}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Retiros posibles</p>
                     </div>
                   </div>
                 </div>
-              </div>
+            </section>
+            )}
 
+            {entityPanel === 'STAFF' && (
+            <section className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-3">
                   <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
@@ -1270,8 +1303,71 @@ function App() {
                   <p>Retiros hoy: {resourceDailyRemoved}/{resourceDailyRemoveLimit}. Puedes retirar {resourceRemovableToday}.</p>
                 </div>
               </div>
-            </section>
 
+              <div className={["rounded-3xl border p-5 shadow-sm", theme.border, theme.soft].join(" ")}>
+                <p className={["text-[10px] font-black uppercase", theme.accent].join(" ")}>Resumen de personal</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                    <p className="text-3xl font-black text-slate-900">{resourceTotal}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Personal total</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                    <p className="text-3xl font-black text-slate-900">{resourceAvailable}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Disponible</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                    <p className="text-3xl font-black text-slate-900">{resourceDailyAdded}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Agregado hoy</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                    <p className="text-3xl font-black text-slate-900">{resourceDailyRemoved}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Retirado hoy</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+            )}
+
+            {entityPanel === 'AI' && (
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,.7fr)_minmax(0,1fr)]">
+              <div className={["rounded-3xl border p-5 shadow-sm", theme.border, theme.soft].join(" ")}>
+                <div className="flex items-start gap-3">
+                  <span className={["flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white", theme.button].join(" ")}>
+                    <Bot size={22}/>
+                  </span>
+                  <div>
+                    <p className={["text-[10px] font-black uppercase", theme.accent].join(" ")}>IA operativa</p>
+                    <h4 className="mt-1 text-2xl font-black text-slate-900">Automatizacion de casos</h4>
+                    <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
+                      Asigna recursos, deja casos en espera si no hay cupo y libera unidades al resolver.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-3xl border border-sky-100 bg-sky-50 p-5 shadow-sm">
+                  <p className="text-3xl font-black text-sky-700">{entityStats.waiting}</p>
+                  <p className="mt-2 text-[10px] font-black uppercase text-sky-700">Esperando cupo</p>
+                </div>
+                <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
+                  <p className="text-3xl font-black text-amber-700">{entityStats.progress}</p>
+                  <p className="mt-2 text-[10px] font-black uppercase text-amber-700">En atencion</p>
+                </div>
+                <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
+                  <p className="text-3xl font-black text-emerald-700">{entityStats.resolved}</p>
+                  <p className="mt-2 text-[10px] font-black uppercase text-emerald-700">Resueltas</p>
+                </div>
+                <div className="rounded-3xl border border-red-100 bg-red-50 p-5 shadow-sm">
+                  <p className="text-3xl font-black text-red-700">{entityStats.high}</p>
+                  <p className="mt-2 text-[10px] font-black uppercase text-red-700">Alta prioridad</p>
+                </div>
+              </div>
+            </section>
+            )}
+
+            {entityPanel === 'REPORTS' && (
+            <>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
               {[
                 { label: 'Total', value: entityStats.total, icon: <Layers size={18}/>, color: 'text-slate-700 bg-slate-100' },
@@ -1519,6 +1615,8 @@ function App() {
                 )}
               </aside>
             </section>
+            </>
+            )}
           </div>
           </>
         )}
