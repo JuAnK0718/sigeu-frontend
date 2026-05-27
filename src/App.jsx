@@ -1146,9 +1146,9 @@ function App() {
               </div>
             </section>
 
-            <section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="space-y-5">
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,.95fr)_minmax(360px,.75fr)]">
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
                       <span className={["flex h-12 w-12 items-center justify-center rounded-2xl text-white", theme.panel].join(" ")}>
@@ -1156,7 +1156,7 @@ function App() {
                       </span>
                       <div>
                         <p className="text-[10px] font-black uppercase text-slate-400">Recursos operativos</p>
-                        <h4 className="text-xl font-black text-slate-900">{resourceAvailable} disponibles</h4>
+                        <h4 className="text-2xl font-black text-slate-900">{resourceAvailable} disponibles</h4>
                         <p className="text-xs font-bold text-slate-500">{resourceUsed} ocupados de {resourceTotal} {resourceUnitName}</p>
                       </div>
                     </div>
@@ -1167,30 +1167,84 @@ function App() {
                       <p className="mt-2 text-right text-[10px] font-black uppercase text-slate-400">{resourceUsagePercent}% en uso</p>
                     </div>
                   </div>
-                  <form onSubmit={handleAddResources} className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-end">
-                    <label className="min-w-0 flex-1">
-                      <span className="text-[10px] font-black uppercase text-slate-400">Agregar personal hoy</span>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                      <p className="text-2xl font-black text-slate-900">{resourceTotal}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-slate-400">Total</p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                      <p className="text-2xl font-black text-amber-700">{resourceUsed}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-amber-600">Ocupados</p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                      <p className="text-2xl font-black text-emerald-700">{resourceAvailable}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-emerald-600">Libres</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={["rounded-3xl border p-5 shadow-sm", theme.border, theme.soft].join(" ")}>
+                  <div className="flex items-start gap-3">
+                    <span className={["flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white", theme.button].join(" ")}>
+                      <Bot size={20}/>
+                    </span>
+                    <div>
+                      <p className={["text-[10px] font-black uppercase", theme.accent].join(" ")}>IA operativa</p>
+                      <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
+                        Asigna recursos, deja casos en espera si no hay cupo y libera unidades al resolver.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                      <p className="text-2xl font-black text-slate-900">{entityStats.waiting}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Esperando cupo</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                      <p className="text-2xl font-black text-slate-900">{entityStats.progress}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase text-slate-500">En atencion</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                    <Users size={20}/>
+                  </span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Gestion de personal</p>
+                    <h4 className="text-xl font-black text-slate-900">Altas y retiros diarios</h4>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  <form onSubmit={handleAddResources} className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                    <label className="block">
+                      <span className="text-[10px] font-black uppercase text-blue-700">Agregar personal hoy</span>
                       <input
                         type="number"
                         min="1"
                         max={resourceInputMax}
                         value={resourceAddUnits}
                         onChange={e => setResourceAddUnits(Math.max(1, Math.min(Number(e.target.value) || 1, resourceInputMax)))}
-                        className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-900 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                        className="mt-2 h-12 w-full rounded-2xl border border-blue-100 bg-white px-4 text-sm font-black text-slate-900 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                         disabled={resourceRemainingDailyAdd <= 0 || isAddingResources}
                       />
                     </label>
                     <button
                       type="submit"
                       disabled={resourceRemainingDailyAdd <= 0 || isAddingResources}
-                      className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isAddingResources ? <Loader2 className="animate-spin" size={15}/> : <Plus size={15}/>} Agregar
                     </button>
                   </form>
-                  <form onSubmit={handleRemoveResources} className="flex flex-col gap-3 rounded-2xl border border-red-100 bg-red-50/60 p-3 sm:flex-row sm:items-end">
-                    <label className="min-w-0 flex-1">
-                      <span className="text-[10px] font-black uppercase text-red-500">Retirar personal disponible</span>
+
+                  <form onSubmit={handleRemoveResources} className="rounded-2xl border border-red-100 bg-red-50/70 p-4">
+                    <label className="block">
+                      <span className="text-[10px] font-black uppercase text-red-600">Retirar personal disponible</span>
                       <input
                         type="number"
                         min="1"
@@ -1204,28 +1258,16 @@ function App() {
                     <button
                       type="submit"
                       disabled={resourceRemovableToday <= 0 || isRemovingResources}
-                      className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isRemovingResources ? <Loader2 className="animate-spin" size={15}/> : <UserMinus size={15}/>} Retirar
                     </button>
                   </form>
-                  <div className="grid gap-2 text-[10px] font-black uppercase text-slate-400 sm:grid-cols-2">
-                    <p>Ingresos hoy: {resourceDailyAdded}/{resourceDailyLimit}. Restan {resourceRemainingDailyAdd}.</p>
-                    <p>Retiros hoy: {resourceDailyRemoved}/{resourceDailyRemoveLimit}. Puedes retirar {resourceRemovableToday}.</p>
-                  </div>
                 </div>
-              </div>
-              <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
-                    <Bot size={20}/>
-                  </span>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-blue-700">IA operativa</p>
-                    <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
-                      Asigna recursos, atiende casos con cupo, deja alertas en espera y libera unidades al resolver.
-                    </p>
-                  </div>
+
+                <div className="mt-4 grid gap-2 text-[10px] font-black uppercase text-slate-400">
+                  <p>Ingresos hoy: {resourceDailyAdded}/{resourceDailyLimit}. Restan {resourceRemainingDailyAdd}.</p>
+                  <p>Retiros hoy: {resourceDailyRemoved}/{resourceDailyRemoveLimit}. Puedes retirar {resourceRemovableToday}.</p>
                 </div>
               </div>
             </section>
