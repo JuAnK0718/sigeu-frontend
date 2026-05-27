@@ -21,6 +21,12 @@ export const getIncidentMapUrl = ({ lat, lng }) => {
 
 export const getEmergencyPriority = (emergency, role) => {
   const text = `${emergency.title || ''} ${emergency.description || ''} ${emergency.type || ''}`.toLowerCase();
+  const criticalWords = [
+    'derrumbe', 'deslizamiento', 'explosion', 'explosión', 'arma', 'disparo',
+    'secuestro', 'atrapado', 'atrapados', 'inconsciente', 'sin respuesta',
+    'no responde', 'fatal', 'muerto', 'fallecido', 'colapso', 'gas',
+    'incendio grande', 'llamas'
+  ];
   const highByRole = {
     POLICIA: ['arma', 'disparo', 'robo', 'asalto', 'violencia', 'secuestro', 'herido'],
     BOMBEROS: ['incendio', 'fuego', 'humo', 'explosion', 'explosión', 'gas', 'atrapado'],
@@ -29,13 +35,16 @@ export const getEmergencyPriority = (emergency, role) => {
   const mediumWords = ['accidente', 'choque', 'emergencia', 'riesgo', 'auxilio'];
   const highWords = highByRole[role] || ['emergencia', 'grave', 'herido'];
 
+  if (criticalWords.some(word => text.includes(word))) {
+    return { label: 'Crítica', level: 4, className: 'bg-red-600 text-white border-red-700', dot: 'bg-white' };
+  }
   if (highWords.some(word => text.includes(word))) {
-    return { label: 'Alta', className: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' };
+    return { label: 'Alta', level: 3, className: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' };
   }
   if (mediumWords.some(word => text.includes(word))) {
-    return { label: 'Media', className: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+    return { label: 'Media', level: 2, className: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
   }
-  return { label: 'Normal', className: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
+  return { label: 'Normal', level: 1, className: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
 };
 
 export const getStatusConfig = (status) => {

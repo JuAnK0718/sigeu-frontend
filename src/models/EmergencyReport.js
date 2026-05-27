@@ -9,6 +9,8 @@ export class EmergencyReport {
     this.type = data.type || '';
     this.status = data.status || 'PENDING';
     this.targetEntity = data.targetEntity || '';
+    this.reporterUsername = data.reporterUsername || '';
+    this.assignedOperatorUsername = data.assignedOperatorUsername || '';
     this.image = data.image || '';
     this.createdAt = data.createdAt || null;
     this.assignedUnits = data.assignedUnits ?? 0;
@@ -18,6 +20,8 @@ export class EmergencyReport {
     this.autoStartedAt = data.autoStartedAt || null;
     this.autoResolveAt = data.autoResolveAt || null;
     this.autoDeleteAt = data.autoDeleteAt || null;
+    this.resolvedAt = data.resolvedAt || null;
+    this.deleteReason = data.deleteReason || '';
     this.viewerRole = viewerRole;
   }
 
@@ -74,7 +78,7 @@ export class EmergencyReport {
 
   matchesFilter(filterId) {
     if (filterId === 'ALL') return true;
-    if (filterId === 'HIGH') return this.priority.label === 'Alta';
+    if (filterId === 'HIGH') return this.priority.level >= 3;
     if (filterId === 'IMAGE') return this.hasImage;
     if (filterId === 'MAP') return this.hasMap;
     return this.status === filterId;
@@ -93,6 +97,8 @@ export class EmergencyReport {
       type: this.type,
       status: this.status,
       targetEntity: this.targetEntity,
+      reporterUsername: this.reporterUsername,
+      assignedOperatorUsername: this.assignedOperatorUsername,
       image: this.image,
       createdAt: this.createdAt,
       assignedUnits: this.assignedUnits,
@@ -102,6 +108,8 @@ export class EmergencyReport {
       autoStartedAt: this.autoStartedAt,
       autoResolveAt: this.autoResolveAt,
       autoDeleteAt: this.autoDeleteAt,
+      resolvedAt: this.resolvedAt,
+      deleteReason: this.deleteReason,
     };
   }
 }
@@ -118,7 +126,7 @@ export class EmergencyDashboard {
       waiting: this.items.filter(item => item.isWaiting).length,
       progress: this.items.filter(item => item.isInProgress).length,
       resolved: this.items.filter(item => item.isResolved).length,
-      high: this.items.filter(item => item.priority.label === 'Alta').length,
+      high: this.items.filter(item => item.priority.level >= 3).length,
       image: this.items.filter(item => item.hasImage).length,
       map: this.items.filter(item => item.hasMap).length,
     };

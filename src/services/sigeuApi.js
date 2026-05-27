@@ -34,6 +34,14 @@ export const fetchEmergenciesByTarget = (target) => {
   });
 };
 
+export const fetchMyEmergencies = () => {
+  return fetch(`${API_URL}/emergencies/mine?t=${Date.now()}`, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: authHeaders({ 'Cache-Control': 'no-cache' }),
+  });
+};
+
 export const fetchResourceSummary = (target) => {
   return fetch(`${API_URL}/emergencies/resources?target=${target}&t=${Date.now()}`, {
     method: 'GET',
@@ -98,10 +106,11 @@ export const updateEmergencyStatus = (id, status) => {
   });
 };
 
-export const deleteEmergencyById = (id) => {
+export const deleteEmergencyById = (id, reason = '') => {
   return fetch(`${API_URL}/emergencies/${id}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: authHeaders(reason ? jsonHeaders : {}),
+    body: reason ? JSON.stringify({ reason }) : undefined,
   });
 };
 

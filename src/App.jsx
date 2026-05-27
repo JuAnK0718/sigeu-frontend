@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText, Bot, Users, Truck, Ambulance, TimerReset, Plus, UserMinus } from 'lucide-react'
+import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText, Bot, Users, Truck, Ambulance, TimerReset, Plus, UserMinus, MapPinned, History, PlayCircle, Gauge } from 'lucide-react'
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
 import { EmergencyDashboard, EmergencyReport } from './models/EmergencyReport'
 import { SigeuUser } from './models/SigeuUser'
-import { addResourceUnits, analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, fetchResourceSummary, loginUser, recoverUser, registerUser, removeResourceUnits, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
+import { addResourceUnits, analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, fetchMyEmergencies, fetchResourceSummary, loginUser, recoverUser, registerUser, removeResourceUnits, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
 import { formatEmergencyTime, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig } from './utils/emergencies'
 
 const styles = `
@@ -141,10 +141,14 @@ function App() {
   const [selectedImage, setSelectedImage] = useState(null)
   const [appNotice, setAppNotice] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [detailTarget, setDetailTarget] = useState(null)
   const [entityFilter, setEntityFilter] = useState('ALL')
   const [entityPanel, setEntityPanel] = useState('REPORTS')
+  const [mapFocusId, setMapFocusId] = useState(null)
   const [entitySearch, setEntitySearch] = useState('')
+  const [citizenReports, setCitizenReports] = useState([])
+  const [isLoadingCitizenReports, setIsLoadingCitizenReports] = useState(false)
   const [resourceSummary, setResourceSummary] = useState(null)
   const [resourceAddUnits, setResourceAddUnits] = useState(1)
   const [resourceRemoveUnits, setResourceRemoveUnits] = useState(1)
@@ -217,6 +221,28 @@ function App() {
       };
       fetchEmergencies();
       intervalId = setInterval(fetchEmergencies, 3000);
+    }
+    return () => { if (intervalId) clearInterval(intervalId); };
+  }, [view, user])
+
+  useEffect(() => {
+    let intervalId;
+    if (view === 'DASHBOARD' && user?.role === 'CITIZEN') {
+      const fetchCitizenReports = async () => {
+        setIsLoadingCitizenReports(true)
+        try {
+          const res = await fetchMyEmergencies()
+          if (res.ok) {
+            setCitizenReports(await res.json())
+          }
+        } catch (error) {
+          console.error(error)
+        } finally {
+          setIsLoadingCitizenReports(false)
+        }
+      }
+      fetchCitizenReports()
+      intervalId = setInterval(fetchCitizenReports, 5000)
     }
     return () => { if (intervalId) clearInterval(intervalId); };
   }, [view, user])
@@ -340,6 +366,7 @@ function App() {
     }
     setIsSendingReport(true)
     const failedDeliveries = [];
+    const createdReports = [];
     let successfulDeliveries = 0;
     try {
       for (const entidad of selectedEntities) {
@@ -353,6 +380,7 @@ function App() {
         const res = await createEmergency(payload);
         if (res.ok) {
           successfulDeliveries++;
+          createdReports.push(await res.json());
         } else {
           const errorText = await res.text();
           failedDeliveries.push(`${entidad}: ${errorText || `error ${res.status}`}`);
@@ -375,9 +403,26 @@ function App() {
       );
       setEmergencyForm({ title: '', description: '', location: '', type: 'ACCIDENT', image: '' }); setSelectedEntities(['POLICIA']); setImagePreview(null)
       setAiDescription('')
+      if (createdReports.length > 0) {
+        setCitizenReports(current => [...createdReports, ...current].filter((item, index, all) => all.findIndex(other => other.id === item.id) === index))
+      }
     } else {
       showAppNotice(`No se pudo enviar el reporte. ${failedDeliveries.join(' | ') || 'El backend no respondio.'}`, 'error');
     }
+  }
+
+  const loadDemoReport = () => {
+    setEmergencyForm({
+      title: 'Choque multiple en avenida',
+      description: 'Choque multiple con posible persona herida y trafico detenido. Se requiere apoyo para asegurar la zona.',
+      location: '1.214500, -77.278400',
+      type: 'ACCIDENT',
+      image: ''
+    })
+    setAiDescription('Analisis de IA:\nEscena demo: accidente vial con posible bloqueo de via.\nRiesgos: posibles heridos y trafico detenido.\nGravedad: Alta por riesgo para peatones y vehiculos.\nEntidades: POLICIA, HOSPITAL.')
+    setSelectedEntities(['POLICIA', 'HOSPITAL'])
+    setImagePreview(null)
+    showAppNotice('Reporte demo cargado. Puedes revisarlo y enviarlo cuando quieras.', 'success')
   }
 
   const updateStatus = async (id, newStatus) => {
@@ -467,6 +512,7 @@ function App() {
 
   const requestDeleteEmergency = (emergency) => {
     setDeleteTarget(emergency);
+    setDeleteReason('Reporte duplicado');
   }
 
   const deleteEmergency = async () => {
@@ -474,14 +520,16 @@ function App() {
     const id = deleteTarget.id;
     let res;
     try {
-      res = await deleteEmergencyById(id)
+      res = await deleteEmergencyById(id, deleteReason)
     } catch {
       showAppNotice('No se pudo conectar con el servidor para borrar el incidente.', 'error');
       return;
     }
     if (res.ok) {
       setEmergencies(current => current.filter(em => em.id !== id))
+      setCitizenReports(current => current.filter(em => em.id !== id))
       setDeleteTarget(null)
+      setDeleteReason('')
       setDetailTarget(current => current?.id === id ? null : current)
     } else {
       showAppNotice('No se pudo borrar el incidente. Inténtalo nuevamente.', 'error');
@@ -910,11 +958,13 @@ function App() {
   const descriptionCounterClass = emergencyForm.description.length >= FIELD_LIMITS.description ? 'text-red-500' : citizenMutedClass;
   const descriptionPreviewClass = isCitizenDark ? 'border-cyan-900/50 bg-cyan-950/20 text-slate-100' : 'border-blue-100 bg-blue-50/80 text-slate-800';
   const importantDescriptionClass = isCitizenDark ? 'font-black text-cyan-200' : 'font-black text-slate-950';
+  const citizenDashboard = new EmergencyDashboard(citizenReports, user?.role);
+  const citizenStats = citizenDashboard.stats;
   const dashboard = new EmergencyDashboard(emergencies, user?.role);
   const entityStats = dashboard.stats;
   const entityReports = dashboard.filter(entitySearch, entityFilter);
   const sortedEntityReports = [...entityReports].sort((a, b) => {
-    const priorityDiff = (b.priority.label === 'Alta') - (a.priority.label === 'Alta');
+    const priorityDiff = (b.priority.level || 0) - (a.priority.level || 0);
     if (priorityDiff) return priorityDiff;
 
     const statusOrder = { PENDING: 0, WAITING: 1, IN_PROGRESS: 2, RESOLVED: 3 };
@@ -951,10 +1001,13 @@ function App() {
   const resourceRemoveInputMax = Math.max(resourceRemovableToday, 1);
   const entityPanelOptions = [
     { id: 'REPORTS', label: 'Reportes', count: entityStats.total, icon: <Layers size={18}/> },
+    { id: 'MAP', label: 'Mapa', count: entityStats.map, icon: <MapPinned size={18}/> },
     { id: 'RESOURCES', label: 'Recursos', count: resourceAvailable, icon: resourceIcon },
     { id: 'STAFF', label: 'Personal', count: resourceTotal, icon: <Users size={18}/> },
     { id: 'AI', label: 'IA operativa', count: entityStats.waiting + entityStats.progress, icon: <Bot size={18}/> },
   ];
+  const mapReports = sortedEntityReports.filter(item => item.coordinates && item.status !== 'RESOLVED');
+  const mapFocusReport = mapReports.find(item => item.id === mapFocusId) || mapReports[0] || null;
   const activeDetailReport = sortedEntityReports.find(item => item.id === detailTarget?.id) || sortedEntityReports[0] || null;
   const activeDetailStatus = activeDetailReport ? getStatusConfig(activeDetailReport.status) : null;
   const activeDetailPriority = activeDetailReport ? activeDetailReport.priority : null;
@@ -1102,6 +1155,13 @@ function App() {
                     })}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={loadDemoReport}
+                  className={["flex w-full items-center justify-center gap-2 rounded-2xl border p-4 text-xs font-black uppercase transition-all", isCitizenDark ? "border-cyan-900/50 bg-cyan-950/30 text-cyan-100 hover:bg-cyan-900/40" : "border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100"].join(" ")}
+                >
+                  <PlayCircle size={16}/> Cargar demo
+                </button>
                 <div className={["rounded-3xl border p-5", isCitizenDark ? "border-red-900/40 bg-slate-900/95 shadow-black/20" : "border-red-100 bg-white shadow-sm"].join(" ")}>
                   <button type="submit" disabled={selectedEntities.length === 0 || isSendingReport || isAnalyzing} className={`relative flex min-h-[190px] w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl p-6 text-center font-black uppercase italic text-white shadow-xl transition-all active:scale-95 sm:min-h-[210px] ${selectedEntities.length === 0 || isSendingReport || isAnalyzing ? (isCitizenDark ? 'bg-slate-800 text-slate-500 shadow-none cursor-not-allowed' : 'bg-slate-300 text-slate-500 shadow-none cursor-not-allowed') : 'bg-[#ff0000] shadow-red-200 hover:bg-red-700'}`}>
                     <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15">
@@ -1115,6 +1175,64 @@ function App() {
                 </div>
               </div>
             </form>
+            <section className={["border-t p-5 md:p-8 lg:p-10", isCitizenDark ? "border-slate-800 bg-slate-950/80" : "border-slate-200 bg-white"].join(" ")}>
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <span className={["inline-flex items-center gap-2 text-[10px] font-black uppercase", isCitizenDark ? "text-cyan-200" : "text-blue-700"].join(" ")}><History size={14}/> Seguimiento ciudadano</span>
+                  <h3 className={["mt-2 text-2xl font-black italic", isCitizenDark ? "text-white" : "text-slate-900"].join(" ")}>Mis reportes recientes</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className={["rounded-2xl border px-4 py-3", isCitizenDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-slate-50"].join(" ")}>
+                    <p className="text-2xl font-black">{citizenStats.total}</p>
+                    <p className={["text-[10px] font-black uppercase", citizenMutedClass].join(" ")}>Total</p>
+                  </div>
+                  <div className={["rounded-2xl border px-4 py-3", isCitizenDark ? "border-slate-700 bg-slate-900" : "border-amber-100 bg-amber-50"].join(" ")}>
+                    <p className="text-2xl font-black">{citizenStats.progress + citizenStats.waiting}</p>
+                    <p className={["text-[10px] font-black uppercase", citizenMutedClass].join(" ")}>Activos</p>
+                  </div>
+                  <div className={["rounded-2xl border px-4 py-3", isCitizenDark ? "border-slate-700 bg-slate-900" : "border-emerald-100 bg-emerald-50"].join(" ")}>
+                    <p className="text-2xl font-black">{citizenStats.resolved}</p>
+                    <p className={["text-[10px] font-black uppercase", citizenMutedClass].join(" ")}>Resueltos</p>
+                  </div>
+                </div>
+              </div>
+              {isLoadingCitizenReports && citizenReports.length === 0 ? (
+                <div className="mt-5 flex items-center gap-2 text-sm font-bold text-slate-400"><Loader2 className="animate-spin" size={16}/> Cargando reportes...</div>
+              ) : citizenReports.length === 0 ? (
+                <div className={["mt-5 rounded-3xl border border-dashed p-8 text-center", isCitizenDark ? "border-slate-700 bg-slate-900/70 text-slate-400" : "border-slate-200 bg-slate-50 text-slate-400"].join(" ")}>
+                  <History size={28} className="mx-auto opacity-60"/>
+                  <p className="mt-3 text-sm font-black uppercase">Aun no tienes reportes enviados</p>
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-3 lg:grid-cols-3">
+                  {EmergencyReport.collection(citizenReports, user?.role).slice(0, 6).map(report => {
+                    const status = getStatusConfig(report.status);
+                    const priority = report.priority;
+                    return (
+                      <article key={report.id} className={["rounded-3xl border p-4 shadow-sm", isCitizenDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-slate-50"].join(" ")}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className={["line-clamp-2 text-base font-black italic", isCitizenDark ? "text-white" : "text-slate-900"].join(" ")}>{report.title}</h4>
+                            <p className={["mt-1 text-[11px] font-bold", citizenMutedClass].join(" ")}>{formatEmergencyTime(report.createdAt)}</p>
+                          </div>
+                          <span className={["shrink-0 rounded-full border px-2 py-1 text-[10px] font-black uppercase", priority.className].join(" ")}>{priority.label}</span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className={["inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase", status.className].join(" ")}>
+                            <span className={["h-2 w-2 rounded-full", status.dot].join(" ")}></span>{status.label}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-600">{report.targetEntity}</span>
+                        </div>
+                        <p className={["mt-3 line-clamp-2 text-sm font-medium", isCitizenDark ? "text-slate-300" : "text-slate-600"].join(" ")}>{report.description}</p>
+                        <button type="button" onClick={() => setDetailTarget(report)} className={["mt-4 w-full rounded-2xl p-3 text-xs font-black uppercase transition-all", isCitizenDark ? "bg-cyan-700 text-white hover:bg-cyan-600" : "bg-slate-900 text-white hover:bg-blue-700"].join(" ")}>
+                          Ver seguimiento
+                        </button>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
           </div>
         ) : (
           <>
@@ -1366,6 +1484,77 @@ function App() {
             </section>
             )}
 
+            {entityPanel === 'MAP' && (
+            <section className="grid gap-5 xl:grid-cols-[minmax(360px,.75fr)_minmax(0,1.25fr)]">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Mapa general</p>
+                    <h3 className="mt-1 text-xl font-black text-slate-900">Reportes con ubicacion</h3>
+                  </div>
+                  <span className={["rounded-2xl px-4 py-2 text-sm font-black", theme.soft, theme.accent].join(" ")}>{mapReports.length}</span>
+                </div>
+                {mapReports.length === 0 ? (
+                  <div className="mt-4 flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                    <MapPinned size={30} className="text-slate-300"/>
+                    <p className="mt-3 text-xs font-black uppercase text-slate-400">No hay reportes activos con mapa</p>
+                  </div>
+                ) : (
+                  <div className="mt-4 max-h-[560px] space-y-3 overflow-y-auto pr-1">
+                    {mapReports.map(report => {
+                      const status = getStatusConfig(report.status);
+                      const isSelected = mapFocusReport?.id === report.id;
+                      return (
+                        <button
+                          key={report.id}
+                          type="button"
+                          onClick={() => setMapFocusId(report.id)}
+                          className={["w-full rounded-2xl border p-4 text-left transition-all", isSelected ? `${theme.border} ${theme.soft} ring-2 ring-blue-200` : "border-slate-200 bg-slate-50 hover:bg-white"].join(" ")}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <h4 className="line-clamp-2 text-base font-black italic text-slate-900">{report.title}</h4>
+                            <span className={["shrink-0 rounded-full border px-2 py-1 text-[10px] font-black uppercase", report.priority.className].join(" ")}>{report.priority.label}</span>
+                          </div>
+                          <p className="mt-2 flex items-start gap-2 text-xs font-bold text-slate-500"><MapPin size={13} className="mt-0.5 shrink-0"/> {report.location}</p>
+                          <span className={["mt-3 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase", status.className].join(" ")}>
+                            <span className={["h-2 w-2 rounded-full", status.dot].join(" ")}></span>{status.label}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                {mapFocusReport?.coordinates ? (
+                  <>
+                    <div className={[theme.panel, "flex items-center justify-between gap-3 p-5 text-white"].join(" ")}>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase text-white/70">Ubicacion seleccionada</p>
+                        <h3 className="mt-1 truncate text-xl font-black italic">{mapFocusReport.title}</h3>
+                      </div>
+                      <a href={getIncidentMapUrl(mapFocusReport.coordinates)} target="_blank" rel="noreferrer" className="shrink-0 rounded-2xl bg-white/10 px-4 py-3 text-xs font-black uppercase transition-all hover:bg-white/20">
+                        Abrir grande
+                      </a>
+                    </div>
+                    <iframe
+                      title={`Mapa general del incidente ${mapFocusReport.id}`}
+                      src={getIncidentMapEmbedUrl(mapFocusReport.coordinates)}
+                      className="h-[520px] w-full border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    ></iframe>
+                  </>
+                ) : (
+                  <div className="flex min-h-[520px] flex-col items-center justify-center p-8 text-center text-slate-400">
+                    <MapPinned size={34}/>
+                    <p className="mt-3 text-sm font-black uppercase">Selecciona un reporte con coordenadas</p>
+                  </div>
+                )}
+              </div>
+            </section>
+            )}
+
             {entityPanel === 'REPORTS' && (
             <>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
@@ -1541,6 +1730,19 @@ function App() {
                           <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-400"><Clock size={14}/> {formatEmergencyTime(activeDetailReport.createdAt)} · Hora Colombia</p>
                         </div>
 
+                        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                          <p className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400"><Gauge size={14}/> Auditoria del caso</p>
+                          <div className="mt-4 grid gap-2 text-xs font-bold text-slate-600">
+                            <p>Radicado: #{activeDetailReport.id}</p>
+                            <p>Reportado por: {activeDetailReport.reporterUsername || 'Ciudadano no identificado'}</p>
+                            <p>Operador: {activeDetailReport.assignedOperatorUsername || 'Sin asignar'}</p>
+                            <p>Recursos: {activeDetailReport.assignedUnits || 0} {activeDetailReport.resourceLabel || resourceUnitName}</p>
+                            {activeDetailReport.autoStartedAt && <p>Atencion: {formatEmergencyTime(activeDetailReport.autoStartedAt)}</p>}
+                            {activeDetailReport.resolvedAt && <p>Resolucion real: {formatEmergencyTime(activeDetailReport.resolvedAt)}</p>}
+                            {activeDetailReport.autoDeleteAt && <p>Limpieza programada: {formatEmergencyTime(activeDetailReport.autoDeleteAt)}</p>}
+                          </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-3">
                           <button type="button" onClick={() => copyEmergencyLocation(activeDetailReport.location)} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
                             <Clipboard size={15}/> Copiar
@@ -1642,7 +1844,7 @@ function App() {
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4 animate-fade-in-up" onClick={() => setDeleteTarget(null)}>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4 animate-fade-in-up" onClick={() => { setDeleteTarget(null); setDeleteReason(''); }}>
           <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600">
@@ -1655,8 +1857,21 @@ function App() {
                 </p>
               </div>
             </div>
+            <label className="mt-5 block">
+              <span className="text-[10px] font-black uppercase text-slate-400">Motivo</span>
+              <select
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-800 outline-none focus:border-red-400 focus:ring-4 focus:ring-red-100"
+              >
+                <option>Reporte duplicado</option>
+                <option>Falso reporte</option>
+                <option>Resuelto manualmente</option>
+                <option>Error de registro</option>
+              </select>
+            </label>
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
+              <button type="button" onClick={() => { setDeleteTarget(null); setDeleteReason(''); }} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
                 Cancelar
               </button>
               <button type="button" onClick={deleteEmergency} className="rounded-2xl bg-red-600 p-4 text-sm font-black uppercase text-white shadow-lg shadow-red-100 transition-all hover:bg-red-700 active:scale-95">
@@ -1731,6 +1946,17 @@ function App() {
                   <p className="text-[10px] font-black uppercase text-slate-400">Ubicación</p>
                   <p className="mt-3 flex items-start gap-2 text-sm font-bold text-slate-700"><MapPin size={16} className="mt-0.5 shrink-0 text-red-600"/> {detailTarget.location || 'Sin ubicación'}</p>
                   <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-400"><Clock size={14}/> {formatEmergencyTime(detailTarget.createdAt)} · Hora Colombia</p>
+                </div>
+                <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400"><Gauge size={14}/> Seguimiento</p>
+                  <div className="mt-4 grid gap-2 text-xs font-bold text-slate-600">
+                    <p>Radicado: #{detailTarget.id}</p>
+                    <p>Entidad: {detailTarget.targetEntity || 'Sin entidad'}</p>
+                    <p>Recursos asignados: {detailReport?.assignedUnits || 0} {detailReport?.resourceLabel || ''}</p>
+                    {detailReport?.autoStartedAt && <p>Atencion: {formatEmergencyTime(detailReport.autoStartedAt)}</p>}
+                    {detailReport?.autoResolveAt && <p>Resolucion estimada: {formatEmergencyTime(detailReport.autoResolveAt)}</p>}
+                    {detailReport?.resolvedAt && <p>Resuelto: {formatEmergencyTime(detailReport.resolvedAt)}</p>}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <button type="button" onClick={() => copyEmergencyLocation(detailTarget.location)} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
