@@ -50,6 +50,14 @@ export const addResourceUnits = (target, units) => {
   });
 };
 
+export const removeResourceUnits = (target, units) => {
+  return fetch(`${API_URL}/emergencies/resources/remove`, {
+    method: 'POST',
+    headers: authHeaders(jsonHeaders),
+    body: JSON.stringify({ target, units: String(units) }),
+  });
+};
+
 export const loginUser = (credentials) => {
   return fetch(`${API_URL}/auth/login`, {
     method: 'POST',

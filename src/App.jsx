@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText, Bot, Users, Truck, Ambulance, TimerReset, Plus } from 'lucide-react'
+import { User, Lock, ArrowRight, LogOut, AlertTriangle, MapPin, CheckCircle, Activity, Shield, Flame, Hospital, Navigation, Camera, Loader2, Eye, EyeOff, X, Image, ArrowLeft, Moon, Sun, Search, Clock, Clipboard, ExternalLink, Layers, Radio, ListFilter, FileText, Bot, Users, Truck, Ambulance, TimerReset, Plus, UserMinus } from 'lucide-react'
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGE_SIZE_MB } from './config'
 import { EmergencyDashboard, EmergencyReport } from './models/EmergencyReport'
 import { SigeuUser } from './models/SigeuUser'
-import { addResourceUnits, analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, fetchResourceSummary, loginUser, recoverUser, registerUser, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
+import { addResourceUnits, analyzeIncidentImage, clearAuthToken, createEmergency, deleteEmergencyById, fetchEmergenciesByTarget, fetchResourceSummary, loginUser, recoverUser, registerUser, removeResourceUnits, setAuthToken, updateEmergencyStatus } from './services/sigeuApi'
 import { formatEmergencyTime, getIncidentMapEmbedUrl, getIncidentMapUrl, getStatusConfig } from './utils/emergencies'
 
 const styles = `
@@ -146,7 +146,9 @@ function App() {
   const [entitySearch, setEntitySearch] = useState('')
   const [resourceSummary, setResourceSummary] = useState(null)
   const [resourceAddUnits, setResourceAddUnits] = useState(1)
+  const [resourceRemoveUnits, setResourceRemoveUnits] = useState(1)
   const [isAddingResources, setIsAddingResources] = useState(false)
+  const [isRemovingResources, setIsRemovingResources] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
   const [isSendingReport, setIsSendingReport] = useState(false)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
@@ -427,6 +429,41 @@ function App() {
     }
   }
 
+  const handleRemoveResources = async (e) => {
+    e.preventDefault()
+    if (!user || user.role === 'CITIZEN') return
+
+    const units = Number(resourceRemoveUnits)
+    if (!Number.isInteger(units) || units < 1) {
+      showAppNotice('Retira una cantidad valida de recursos.', 'warning')
+      return
+    }
+
+    setIsRemovingResources(true)
+    try {
+      const res = await removeResourceUnits(user.role, units)
+      if (res.ok) {
+        const summary = await res.json()
+        setResourceSummary(summary)
+        setResourceRemoveUnits(1)
+
+        const emergenciesRes = await fetchEmergenciesByTarget(user.role)
+        if (emergenciesRes.ok) {
+          setEmergencies(await emergenciesRes.json())
+        }
+
+        showAppNotice(`Se retiraron ${units} recursos disponibles.`, 'success')
+      } else {
+        const errorText = await res.text()
+        showAppNotice(errorText || 'No se pudieron retirar recursos.', 'error')
+      }
+    } catch {
+      showAppNotice('No se pudo conectar con el backend para retirar recursos.', 'error')
+    } finally {
+      setIsRemovingResources(false)
+    }
+  }
+
   const requestDeleteEmergency = (emergency) => {
     setDeleteTarget(emergency);
   }
@@ -583,10 +620,10 @@ function App() {
 
   const getEntityTheme = (role) => {
     switch(role) {
-      case 'POLICIA': return { bg: 'bg-[#031525]', text: 'text-white', icon: <Shield size={28}/>, title: 'Central de Policía' };
-      case 'BOMBEROS': return { bg: 'bg-[#b91c1c]', text: 'text-white', icon: <Flame size={28}/>, title: 'Estación de Bomberos' };
-      case 'HOSPITAL': return { bg: 'bg-[#064e3b]', text: 'text-white', icon: <Hospital size={28}/>, title: 'Red de Hospitales' };
-      default: return { bg: 'bg-[#0f172a]', text: 'text-white', icon: <AlertTriangle size={28}/>, title: 'SIGEU Ciudadano' };
+      case 'POLICIA': return { bg: 'bg-[#031525]', panel: 'bg-[#031525]', soft: 'bg-blue-50', accent: 'text-blue-700', border: 'border-blue-100', button: 'bg-blue-700 hover:bg-blue-800', text: 'text-white', icon: <Shield size={28}/>, title: 'Central de Policia', unitLabel: 'Unidades policiales', actionLabel: 'Asegurar zona', mission: 'Orden publico, seguridad perimetral y respuesta inmediata.' };
+      case 'BOMBEROS': return { bg: 'bg-[#b91c1c]', panel: 'bg-[#7f1d1d]', soft: 'bg-red-50', accent: 'text-red-700', border: 'border-red-100', button: 'bg-red-700 hover:bg-red-800', text: 'text-white', icon: <Flame size={28}/>, title: 'Estacion de Bomberos', unitLabel: 'Camiones disponibles', actionLabel: 'Controlar emergencia', mission: 'Control de fuego, rescate y reduccion del riesgo.' };
+      case 'HOSPITAL': return { bg: 'bg-[#064e3b]', panel: 'bg-[#064e3b]', soft: 'bg-emerald-50', accent: 'text-emerald-700', border: 'border-emerald-100', button: 'bg-emerald-700 hover:bg-emerald-800', text: 'text-white', icon: <Hospital size={28}/>, title: 'Red de Hospitales', unitLabel: 'Ambulancias disponibles', actionLabel: 'Atender paciente', mission: 'Traslado, triage medico y atencion de lesionados.' };
+      default: return { bg: 'bg-[#0f172a]', panel: 'bg-[#0f172a]', soft: 'bg-slate-50', accent: 'text-slate-700', border: 'border-slate-100', button: 'bg-slate-900 hover:bg-slate-800', text: 'text-white', icon: <AlertTriangle size={28}/>, title: 'SIGEU Ciudadano', unitLabel: 'Recursos', actionLabel: 'Atender', mission: 'Respuesta coordinada.' };
     }
   }
 
@@ -874,7 +911,17 @@ function App() {
   const importantDescriptionClass = isCitizenDark ? 'font-black text-cyan-200' : 'font-black text-slate-950';
   const dashboard = new EmergencyDashboard(emergencies, user?.role);
   const entityStats = dashboard.stats;
-  const groupedEmergencies = dashboard.groupByStatus(entitySearch, entityFilter);
+  const entityReports = dashboard.filter(entitySearch, entityFilter);
+  const sortedEntityReports = [...entityReports].sort((a, b) => {
+    const priorityDiff = (b.priority.label === 'Alta') - (a.priority.label === 'Alta');
+    if (priorityDiff) return priorityDiff;
+
+    const statusOrder = { PENDING: 0, WAITING: 1, IN_PROGRESS: 2, RESOLVED: 3 };
+    const statusDiff = (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4);
+    if (statusDiff) return statusDiff;
+
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
   const entityFilterOptions = [
     { id: 'ALL', label: 'Todos', count: entityStats.total },
     { id: 'PENDING', label: 'Nuevas', count: entityStats.pending },
@@ -884,12 +931,6 @@ function App() {
     { id: 'HIGH', label: 'Prioridad alta', count: entityStats.high },
     { id: 'IMAGE', label: 'Con evidencia', count: entityStats.image },
     { id: 'MAP', label: 'Con mapa', count: entityStats.map }
-  ];
-  const entityColumns = [
-    { id: 'PENDING', title: 'Nuevas alertas', icon: <Radio size={16}/>, tone: 'border-red-200 bg-red-50/70 text-red-700' },
-    { id: 'WAITING', title: 'En espera', icon: <TimerReset size={16}/>, tone: 'border-sky-200 bg-sky-50/70 text-sky-700' },
-    { id: 'IN_PROGRESS', title: 'En atención', icon: <Clock size={16}/>, tone: 'border-amber-200 bg-amber-50/70 text-amber-700' },
-    { id: 'RESOLVED', title: 'Resueltas', icon: <CheckCircle size={16}/>, tone: 'border-emerald-200 bg-emerald-50/70 text-emerald-700' }
   ];
   const resourceIcon = user?.role === 'HOSPITAL' ? <Ambulance size={20}/> : user?.role === 'BOMBEROS' ? <Truck size={20}/> : <Users size={20}/>;
   const resourceDefaults = RESOURCE_DEFAULTS[user?.role] || RESOURCE_DEFAULTS.POLICIA;
@@ -902,6 +943,15 @@ function App() {
   const resourceDailyAdded = resourceSummary?.dailyAddedUnits ?? 0;
   const resourceRemainingDailyAdd = resourceSummary?.remainingDailyAdd ?? Math.max(resourceDailyLimit - resourceDailyAdded, 0);
   const resourceInputMax = Math.max(resourceRemainingDailyAdd, 1);
+  const resourceDailyRemoveLimit = resourceSummary?.dailyRemoveLimit ?? 10;
+  const resourceDailyRemoved = resourceSummary?.dailyRemovedUnits ?? 0;
+  const resourceRemainingDailyRemove = resourceSummary?.remainingDailyRemove ?? Math.max(resourceDailyRemoveLimit - resourceDailyRemoved, 0);
+  const resourceRemovableToday = Math.min(resourceAvailable, resourceRemainingDailyRemove);
+  const resourceRemoveInputMax = Math.max(resourceRemovableToday, 1);
+  const activeDetailReport = sortedEntityReports.find(item => item.id === detailTarget?.id) || sortedEntityReports[0] || null;
+  const activeDetailStatus = activeDetailReport ? getStatusConfig(activeDetailReport.status) : null;
+  const activeDetailPriority = activeDetailReport ? activeDetailReport.priority : null;
+  const activeDetailCoordinates = activeDetailReport ? activeDetailReport.coordinates : null;
   const detailReport = detailTarget ? EmergencyReport.fromApi(detailTarget, user?.role) : null;
   const detailCoordinates = detailReport ? detailReport.coordinates : null;
   const detailStatus = detailReport ? getStatusConfig(detailReport.status) : null;
@@ -923,7 +973,7 @@ function App() {
         </div>
       </nav>
 
-      <main className={[isCitizen ? "relative max-w-7xl" : "max-w-5xl", "mx-auto p-4 sm:p-6 md:p-8 animate-fade-in-up"].join(" ")}>
+      <main className={[isCitizen ? "relative max-w-7xl" : "max-w-7xl", "mx-auto p-4 sm:p-6 md:p-8 animate-fade-in-up"].join(" ")}>
         {isCitizen && (
           <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[2rem]">
             <div className={["absolute inset-x-4 top-4 h-44 rounded-[2rem] border", isCitizenDark ? "border-cyan-400/10 bg-[linear-gradient(135deg,rgba(14,165,233,0.18),rgba(239,68,68,0.12),rgba(15,23,42,0))]" : "border-white/70 bg-[linear-gradient(135deg,rgba(14,165,233,0.18),rgba(239,68,68,0.12),rgba(255,255,255,0.55))]"].join(" ")}></div>
@@ -1101,7 +1151,7 @@ function App() {
                 <div className="space-y-5">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                      <span className={["flex h-12 w-12 items-center justify-center rounded-2xl text-white", theme.panel].join(" ")}>
                         {resourceIcon}
                       </span>
                       <div>
@@ -1138,9 +1188,31 @@ function App() {
                       {isAddingResources ? <Loader2 className="animate-spin" size={15}/> : <Plus size={15}/>} Agregar
                     </button>
                   </form>
-                  <p className="text-[10px] font-black uppercase text-slate-400">
-                    Limite diario: {resourceDailyAdded}/{resourceDailyLimit}. Restan {resourceRemainingDailyAdd} {resourceUnitName}.
-                  </p>
+                  <form onSubmit={handleRemoveResources} className="flex flex-col gap-3 rounded-2xl border border-red-100 bg-red-50/60 p-3 sm:flex-row sm:items-end">
+                    <label className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black uppercase text-red-500">Retirar personal disponible</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max={resourceRemoveInputMax}
+                        value={resourceRemoveUnits}
+                        onChange={e => setResourceRemoveUnits(Math.max(1, Math.min(Number(e.target.value) || 1, resourceRemoveInputMax)))}
+                        className="mt-2 h-12 w-full rounded-2xl border border-red-100 bg-white px-4 text-sm font-black text-slate-900 outline-none transition-all focus:border-red-400 focus:ring-4 focus:ring-red-100"
+                        disabled={resourceRemovableToday <= 0 || isRemovingResources}
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={resourceRemovableToday <= 0 || isRemovingResources}
+                      className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isRemovingResources ? <Loader2 className="animate-spin" size={15}/> : <UserMinus size={15}/>} Retirar
+                    </button>
+                  </form>
+                  <div className="grid gap-2 text-[10px] font-black uppercase text-slate-400 sm:grid-cols-2">
+                    <p>Ingresos hoy: {resourceDailyAdded}/{resourceDailyLimit}. Restan {resourceRemainingDailyAdd}.</p>
+                    <p>Retiros hoy: {resourceDailyRemoved}/{resourceDailyRemoveLimit}. Puedes retirar {resourceRemovableToday}.</p>
+                  </div>
                 </div>
               </div>
               <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5 shadow-sm">
@@ -1204,78 +1276,206 @@ function App() {
               </div>
             </section>
 
-            <section className="grid gap-5 xl:grid-cols-4">
-              {entityColumns.map(column => (
-                <div key={column.id} className="min-h-[280px] rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className={["mb-4 flex items-center justify-between rounded-2xl border px-4 py-3", column.tone].join(" ")}>
-                    <span className="flex items-center gap-2 text-xs font-black uppercase">{column.icon} {column.title}</span>
-                    <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-black">{groupedEmergencies[column.id].length}</span>
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(420px,1.1fr)]">
+              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Cola operativa</p>
+                    <h3 className="mt-1 text-xl font-black text-slate-900">Reportes filtrados</h3>
                   </div>
-                  {groupedEmergencies[column.id].length === 0 ? (
-                    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
-                      <ListFilter size={24} className="text-slate-300"/>
-                      <p className="mt-3 text-xs font-black uppercase text-slate-400">Sin reportes aquí</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {groupedEmergencies[column.id].map(em => {
-                        const status = getStatusConfig(em.status);
-                        const isResolved = em.status === 'RESOLVED';
-                        const isInProgress = em.status === 'IN_PROGRESS';
-                        return (
-                          <article key={em.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <h4 className="text-base font-black italic text-slate-900">{em.title}</h4>
-                                <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-slate-400"><Clock size={12}/> {formatEmergencyTime(em.createdAt)}</p>
-                              </div>
-                              <span className={["shrink-0 rounded-full border px-2 py-1 text-[10px] font-black uppercase", em.priority.className].join(" ")}>
-                                {em.priority.label}
-                              </span>
-                            </div>
-                            <p className="mt-3 flex items-start gap-1 text-xs font-bold text-slate-500"><MapPin size={13} className="mt-0.5 shrink-0"/> {em.location || 'Sin ubicación'}</p>
-                            <p className="mt-3 max-h-14 overflow-hidden text-sm font-medium leading-relaxed text-slate-600">"{em.description}"</p>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              <span className={["inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase", status.className].join(" ")}>
-                                <span className={["h-2 w-2 rounded-full", status.dot].join(" ")}></span>{status.label}
-                              </span>
-                              {em.image && <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-blue-700"><Image size={11}/> Evidencia</span>}
-                              {em.coordinates && <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase text-cyan-700"><MapPin size={11}/> Mapa</span>}
-                              {em.assignedUnits > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-600"><Users size={11}/> {em.assignedUnits} {em.resourceLabel || resourceUnitName}</span>}
-                            </div>
-                            {em.operationalNote && (
-                              <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold leading-relaxed text-blue-800">{em.operationalNote}</p>
-                            )}
-                            <div className="mt-4 grid grid-cols-2 gap-2">
-                              <button type="button" onClick={() => setDetailTarget(em)} className="rounded-xl bg-slate-900 p-3 text-xs font-black uppercase text-white transition-all hover:bg-slate-700">Detalle</button>
-                              {em.coordinates ? (
-                                <a href={getIncidentMapUrl(em.coordinates)} target="_blank" rel="noreferrer" className="rounded-xl border border-slate-200 bg-white p-3 text-center text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-50">Mapa</a>
-                              ) : (
-                                <button type="button" disabled className="rounded-xl border border-slate-200 bg-slate-100 p-3 text-xs font-black uppercase text-slate-400">Sin mapa</button>
-                              )}
-                              <button type="button" onClick={() => copyEmergencyLocation(em.location)} className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-black uppercase text-slate-600 transition-all hover:bg-slate-100">Copiar</button>
-                              {em.image ? (
-                                <button type="button" onClick={() => setSelectedImage(em.image)} className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-100">Evidencia</button>
-                              ) : (
-                                <button type="button" disabled className="rounded-xl border border-slate-200 bg-slate-100 p-3 text-xs font-black uppercase text-slate-400">Sin foto</button>
-                              )}
-                            </div>
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              {!isResolved && !isInProgress && (
-                                <button type="button" onClick={() => updateStatus(em.id, 'IN_PROGRESS')} className="rounded-xl bg-amber-500 p-3 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-amber-600">Atender</button>
-                              )}
-                              {!isResolved && (
-                                <button type="button" onClick={() => updateStatus(em.id, 'RESOLVED')} className="rounded-xl bg-emerald-600 p-3 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-emerald-700">Resolver</button>
-                              )}
-                              <button type="button" onClick={() => requestDeleteEmergency(em)} className="rounded-xl border border-red-100 bg-white p-3 text-xs font-black uppercase text-red-500 transition-all hover:bg-red-50">Borrar</button>
-                            </div>
-                          </article>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <span className={["rounded-2xl px-4 py-2 text-sm font-black", theme.soft, theme.accent].join(" ")}>
+                    {sortedEntityReports.length}
+                  </span>
                 </div>
-              ))}
+
+                {sortedEntityReports.length === 0 ? (
+                  <div className="mt-4 flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                    <ListFilter size={28} className="text-slate-300"/>
+                    <p className="mt-3 text-xs font-black uppercase text-slate-400">Sin reportes con este filtro</p>
+                  </div>
+                ) : (
+                  <div className="mt-4 max-h-[720px] space-y-3 overflow-y-auto pr-1">
+                    {sortedEntityReports.map(em => {
+                      const status = getStatusConfig(em.status);
+                      const isSelected = activeDetailReport?.id === em.id;
+                      return (
+                        <button
+                          key={em.id}
+                          type="button"
+                          onClick={() => setDetailTarget(em)}
+                          className={["w-full rounded-2xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md", isSelected ? `${theme.border} ${theme.soft} ring-2 ring-blue-200` : "border-slate-200 bg-slate-50 hover:bg-white"].join(" ")}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h4 className="line-clamp-2 text-base font-black italic text-slate-900">{em.title}</h4>
+                              <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-slate-400"><Clock size={12}/> {formatEmergencyTime(em.createdAt)}</p>
+                            </div>
+                            <span className={["shrink-0 rounded-full border px-2 py-1 text-[10px] font-black uppercase", em.priority.className].join(" ")}>
+                              {em.priority.label}
+                            </span>
+                          </div>
+                          <p className="mt-3 line-clamp-2 text-sm font-medium leading-relaxed text-slate-600">{em.description || 'Sin descripcion registrada.'}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className={["inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase", status.className].join(" ")}>
+                              <span className={["h-2 w-2 rounded-full", status.dot].join(" ")}></span>{status.label}
+                            </span>
+                            {em.image && <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-blue-700"><Image size={11}/> Evidencia</span>}
+                            {em.coordinates && <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-black uppercase text-cyan-700"><MapPin size={11}/> Mapa</span>}
+                            {em.assignedUnits > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-600"><Users size={11}/> {em.assignedUnits} {em.resourceLabel || resourceUnitName}</span>}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <aside className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-28 xl:self-start">
+                {activeDetailReport ? (
+                  <>
+                    <div className={[theme.panel, "p-5 text-white"].join(" ")}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-2 text-[10px] font-black uppercase text-white/70"><FileText size={13}/> Detalle operativo</p>
+                          <h3 className="mt-2 text-2xl font-black italic tracking-normal">{activeDetailReport.title}</h3>
+                          <p className="mt-2 text-sm font-semibold text-white/70">{theme.mission}</p>
+                        </div>
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                          {theme.icon}
+                        </span>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {activeDetailStatus && (
+                          <span className={["inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] font-black uppercase", activeDetailStatus.className].join(" ")}>
+                            <span className={["h-2 w-2 rounded-full", activeDetailStatus.dot].join(" ")}></span>{activeDetailStatus.label}
+                          </span>
+                        )}
+                        {activeDetailPriority && (
+                          <span className={["inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] font-black uppercase", activeDetailPriority.className].join(" ")}>
+                            <span className={["h-2 w-2 rounded-full", activeDetailPriority.dot].join(" ")}></span>Prioridad {activeDetailPriority.label}
+                          </span>
+                        )}
+                        {activeDetailReport.assignedUnits > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase text-white">
+                            <Users size={12}/> {activeDetailReport.assignedUnits} {activeDetailReport.resourceLabel || resourceUnitName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,.95fr)_minmax(0,1.05fr)]">
+                      <section className="space-y-4">
+                        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                          <p className="text-[10px] font-black uppercase text-slate-400">Descripcion</p>
+                          <p className="sigeu-report-textarea mt-3 text-sm font-medium leading-relaxed text-slate-700">
+                            {renderHighlightedDescription(activeDetailReport.description || 'Sin descripcion registrada.', 'font-black text-slate-950')}
+                          </p>
+                        </div>
+
+                        {activeDetailReport.operationalNote && (
+                          <div className={["rounded-3xl border p-5", theme.border, theme.soft].join(" ")}>
+                            <div className="flex items-start gap-3">
+                              <span className={["flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white", theme.button].join(" ")}>
+                                <Bot size={17}/>
+                              </span>
+                              <div>
+                                <p className={["text-[10px] font-black uppercase", theme.accent].join(" ")}>IA operativa</p>
+                                <p className="mt-2 text-sm font-bold leading-relaxed text-slate-800">{activeDetailReport.operationalNote}</p>
+                              </div>
+                            </div>
+                            <div className="mt-4 grid gap-2 text-xs font-bold text-slate-700">
+                              {activeDetailReport.autoStartedAt && (
+                                <p className="flex items-center gap-2"><Clock size={14}/> Atencion iniciada: {formatEmergencyTime(activeDetailReport.autoStartedAt)}</p>
+                              )}
+                              {activeDetailReport.autoResolveAt && (
+                                <p className="flex items-center gap-2"><CheckCircle size={14}/> Resolucion estimada: {formatEmergencyTime(activeDetailReport.autoResolveAt)}</p>
+                              )}
+                              {activeDetailReport.autoDeleteAt && (
+                                <p className="flex items-center gap-2"><TimerReset size={14}/> Borrado automatico: {formatEmergencyTime(activeDetailReport.autoDeleteAt)}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                          <p className="text-[10px] font-black uppercase text-slate-400">Ubicacion</p>
+                          <p className="mt-3 flex items-start gap-2 text-sm font-bold text-slate-700"><MapPin size={16} className="mt-0.5 shrink-0 text-red-600"/> {activeDetailReport.location || 'Sin ubicacion'}</p>
+                          <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-400"><Clock size={14}/> {formatEmergencyTime(activeDetailReport.createdAt)} · Hora Colombia</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button type="button" onClick={() => copyEmergencyLocation(activeDetailReport.location)} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-black uppercase text-slate-600 transition-all hover:bg-slate-50">
+                            <Clipboard size={15}/> Copiar
+                          </button>
+                          {activeDetailCoordinates ? (
+                            <a href={getIncidentMapUrl(activeDetailCoordinates)} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-100">
+                              <ExternalLink size={15}/> Mapa
+                            </a>
+                          ) : (
+                            <button type="button" disabled className="rounded-2xl border border-slate-200 bg-slate-100 p-4 text-xs font-black uppercase text-slate-400">Sin mapa</button>
+                          )}
+                          {activeDetailReport.image ? (
+                            <button type="button" onClick={() => setSelectedImage(activeDetailReport.image)} className="flex items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-black uppercase text-blue-700 transition-all hover:bg-blue-100">
+                              <Eye size={15}/> Evidencia
+                            </button>
+                          ) : (
+                            <button type="button" disabled className="rounded-2xl border border-slate-200 bg-slate-100 p-4 text-xs font-black uppercase text-slate-400">Sin foto</button>
+                          )}
+                          <button type="button" onClick={() => requestDeleteEmergency(activeDetailReport)} className="rounded-2xl border border-red-100 bg-white p-4 text-xs font-black uppercase text-red-500 transition-all hover:bg-red-50">
+                            Borrar
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          {activeDetailReport.status !== 'RESOLVED' && activeDetailReport.status !== 'IN_PROGRESS' && (
+                            <button type="button" onClick={() => updateStatus(activeDetailReport.id, 'IN_PROGRESS')} className="rounded-2xl bg-amber-500 p-4 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-amber-600">
+                              {theme.actionLabel}
+                            </button>
+                          )}
+                          {activeDetailReport.status !== 'RESOLVED' && (
+                            <button type="button" onClick={() => updateStatus(activeDetailReport.id, 'RESOLVED')} className="rounded-2xl bg-emerald-600 p-4 text-xs font-black uppercase text-white shadow-sm transition-all hover:bg-emerald-700">
+                              Resolver
+                            </button>
+                          )}
+                        </div>
+                      </section>
+
+                      <section className="space-y-4">
+                        {activeDetailCoordinates ? (
+                          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-inner">
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+                              <span className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500"><MapPin size={14} className="text-red-600"/> Mapa operativo</span>
+                              <a href={getIncidentMapUrl(activeDetailCoordinates)} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">Abrir grande</a>
+                            </div>
+                            <iframe
+                              title={`Mapa operativo del incidente ${activeDetailReport.id}`}
+                              src={getIncidentMapEmbedUrl(activeDetailCoordinates)}
+                              className="h-[300px] w-full border-0"
+                              loading="lazy"
+                              referrerPolicy="no-referrer-when-downgrade"
+                            ></iframe>
+                          </div>
+                        ) : (
+                          <div className="flex min-h-[260px] flex-col items-center justify-center rounded-3xl border border-dashed border-amber-200 bg-amber-50 p-5 text-center">
+                            <MapPin size={28} className="text-amber-500"/>
+                            <p className="mt-3 text-xs font-black uppercase text-amber-700">Ubicacion sin coordenadas validas</p>
+                          </div>
+                        )}
+                        {activeDetailReport.image && (
+                          <button type="button" onClick={() => setSelectedImage(activeDetailReport.image)} className="block w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 p-2 text-left transition-all hover:border-blue-200">
+                            <img src={activeDetailReport.image} className="h-56 w-full rounded-2xl object-cover" alt="Evidencia del incidente" />
+                          </button>
+                        )}
+                      </section>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex min-h-[520px] flex-col items-center justify-center p-8 text-center">
+                    <ListFilter size={32} className="text-slate-300"/>
+                    <p className="mt-3 text-sm font-black uppercase text-slate-400">Selecciona un reporte</p>
+                  </div>
+                )}
+              </aside>
             </section>
           </div>
           </>
@@ -1327,7 +1527,7 @@ function App() {
         </div>
       )}
 
-      {detailTarget && (
+      {isCitizen && detailTarget && (
         <div className="fixed inset-0 z-[115] flex items-center justify-center bg-slate-950/85 p-4 animate-fade-in-up" onClick={() => setDetailTarget(null)}>
           <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className={[theme.bg, "sticky top-0 z-10 flex items-start justify-between gap-4 p-5 text-white md:p-6"].join(" ")}>
