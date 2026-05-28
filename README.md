@@ -1,57 +1,93 @@
 # SIGEU Frontend
 
-Interfaz web de SIGEU para reporte ciudadano y gestion operativa de emergencias. El frontend consume el backend en Railway y el servicio de IA desplegado aparte.
+SIGEU es una aplicacion web orientada al reporte ciudadano y la gestion operativa de emergencias. La interfaz permite registrar incidentes, adjuntar evidencia, consultar el seguimiento del reporte y administrar alertas desde paneles especializados para entidades de respuesta.
 
-## Funcionalidades principales
+El frontend se integra con un backend propio desplegado en Railway y con un servicio independiente de inteligencia artificial encargado del analisis de imagenes.
+
+## Objetivo del proyecto
+
+El objetivo principal de SIGEU es centralizar la comunicacion entre ciudadanos y entidades de atencion, reduciendo la perdida de informacion al momento de reportar una emergencia. El sistema permite que cada reporte incluya descripcion, ubicacion, evidencia visual, analisis automatico y seguimiento por estado.
+
+## Alcance funcional
 
 - Registro e inicio de sesion para ciudadanos y entidades.
-- Envio de reportes con asunto, GPS, descripcion, evidencia fotografica y entidades destino.
-- Analisis de imagen por IA antes de enviar el reporte.
-- Seguimiento ciudadano de reportes enviados.
-- Panel por entidad con filtros, detalle operativo, mapa, recursos, personal e IA operativa.
-- Gestion diaria de recursos: agregar y retirar personal con limites.
-- Flujo automatico de atencion, resolucion y limpieza coordinado por el backend.
-- Modo claro/oscuro en la vista ciudadana.
+- Creacion de reportes con asunto, coordenadas GPS, descripcion e imagen.
+- Analisis de imagenes mediante un servicio externo de IA.
+- Envio del mismo reporte a una o varias entidades.
+- Seguimiento ciudadano de los reportes enviados.
+- Panel operativo para Policia, Bomberos y Hospital.
+- Filtros por estado, prioridad, evidencia, mapa y busqueda textual.
+- Vista detallada del caso con descripcion, evidencia, ubicacion y trazabilidad.
+- Gestion de recursos operativos disponibles, ocupados y en espera.
+- Altas y retiros diarios de personal con limites de control.
+- Automatizacion del ciclo operativo: espera, atencion, resolucion y limpieza.
 
-## Tecnologias
+## Arquitectura general
+
+El sistema esta dividido en tres servicios principales:
+
+- Frontend: aplicacion React encargada de la experiencia de usuario.
+- Backend: API REST en Spring Boot responsable de autenticacion, reportes, recursos, validaciones y flujo operativo.
+- Servicio de IA: API independiente que analiza imagenes y genera una descripcion inicial del incidente.
+
+Esta separacion permite mantener desacoplada la logica visual, la persistencia de datos y el procesamiento de imagenes.
+
+## Tecnologias utilizadas
 
 - React 19
 - Vite 8
 - Tailwind CSS 4
 - Lucide React
 - OpenStreetMap embebido
-- API REST propia en Spring Boot
+- Java 17 y Spring Boot en backend
+- PostgreSQL en Railway
+- Servicio externo de IA para analisis de imagenes
 
-## Estructura
+## Estructura del frontend
 
-- `src/App.jsx`: vistas principales, estado de UI y flujos de usuario.
-- `src/config.js`: URLs de backend, IA y limites de imagen.
-- `src/services/sigeuApi.js`: llamadas al backend y al servicio de IA.
-- `src/models/EmergencyReport.js`: modelo POO para reportes y estadisticas.
-- `src/models/SigeuUser.js`: modelo POO para usuario autenticado.
-- `src/utils/emergencies.js`: prioridad, mapas, coordenadas, fechas y estados.
+- `src/App.jsx`: composicion principal de vistas, estados y flujos de usuario.
+- `src/config.js`: configuracion de URLs y limites de carga.
+- `src/services/sigeuApi.js`: cliente para consumir backend y servicio de IA.
+- `src/models/EmergencyReport.js`: modelo de reporte, filtros, prioridad y estadisticas.
+- `src/models/SigeuUser.js`: modelo de usuario autenticado.
+- `src/utils/emergencies.js`: utilidades de coordenadas, mapas, fechas, estados y prioridad.
+
+## Seguridad y validaciones
+
+- Las contrasenas no se almacenan en texto plano en la base de datos.
+- El backend aplica hashing con BCrypt.
+- La autenticacion entrega token JWT y el frontend lo envia como `Bearer token`.
+- La exigencia obligatoria del token puede activarse gradualmente desde Railway.
+- El backend cuenta con limites de peticiones para reducir abuso.
+- Los formularios aplican limites de longitud en frontend y backend.
+- Los reportes validan datos requeridos antes de registrarse.
 
 ## Variables de entorno
 
-Copia `.env.example` si vas a correr localmente:
+El frontend puede configurarse con las siguientes variables:
 
 ```env
 VITE_API_URL=https://sigeu-backend-production.up.railway.app/api
 VITE_AI_SERVICE_URL=https://sigeu-ai-service-production.up.railway.app/analizar
 ```
 
-Si no defines estas variables, la app usa esos valores por defecto.
+Si no se definen, la aplicacion utiliza los valores por defecto configurados en `src/config.js`.
 
 ## Ejecucion local
 
-En Windows, usa `npm.cmd` si PowerShell bloquea `npm.ps1`:
+Requisitos:
+
+- Node.js
+- npm
+
+Comandos:
 
 ```powershell
 npm.cmd install
 npm.cmd run dev
 ```
 
-Abre:
+URL local:
 
 ```text
 http://localhost:5173/
@@ -66,64 +102,14 @@ npm.cmd run build
 
 ## Despliegue
 
-Vercel puede desplegar el proyecto con:
+El proyecto esta preparado para desplegarse en Vercel.
 
 - Build command: `npm run build`
 - Output directory: `dist`
-- Variables: `VITE_API_URL` y `VITE_AI_SERVICE_URL`
+- Variables requeridas: `VITE_API_URL` y `VITE_AI_SERVICE_URL`
 
-## Notas de entrega
+## Consideraciones tecnicas
 
-El frontend no guarda contrasenas en texto plano. El token de sesion se mantiene en `sessionStorage` y se envia al backend como `Bearer token` cuando existe. La proteccion fuerte de rutas depende de activar `SIGEU_AUTH_REQUIRE_TOKEN=true` en Railway cuando ya este probado.
+SIGEU conserva una estrategia de autenticacion gradual para evitar bloqueos durante la integracion entre frontend, backend y servicio de IA. El sistema ya emite y envia tokens, mientras que la restriccion obligatoria puede activarse cuando el entorno desplegado este completamente verificado.
 
-## Guia de defensa
-
-### Que es SIGEU
-
-SIGEU es un sistema de gestion de emergencias que conecta ciudadanos con entidades operativas como Policia, Bomberos y Hospital. El ciudadano reporta una emergencia con ubicacion, evidencia e IA; la entidad recibe, prioriza, atiende y hace seguimiento del caso.
-
-### Que puedes mostrar en la demo
-
-1. Crear o iniciar sesion como ciudadano.
-2. Enviar un reporte con GPS, descripcion e imagen.
-3. Ver el seguimiento ciudadano del reporte.
-4. Entrar como entidad y mostrar filtros, mapa y detalle operativo.
-5. Mostrar recursos disponibles, ocupados y gestion diaria de personal.
-6. Explicar que el backend mueve casos entre espera, atencion, resuelto y limpieza automatica.
-
-### Puntos fuertes
-
-- Frontend en React con componentes y modelos POO.
-- Backend en Java Spring Boot con entidades, repositorios, servicios y controladores.
-- PostgreSQL en Railway para persistencia.
-- IA separada del backend para analizar imagenes.
-- JWT gradual para autenticacion sin bloquear toda la app de golpe.
-- Rate limit para reducir abuso de peticiones.
-- Validaciones de longitud en frontend y backend.
-- Passwords hasheadas con BCrypt.
-- Paneles diferenciados para ciudadano y entidades.
-
-### Preguntas dificiles y respuestas
-
-- Si preguntan si la contrasena se puede ver con F12:
-  La contrasena puede verse si el usuario cambia el input en su propio navegador, pero no se envia ni se guarda en texto plano en la base de datos. En backend se hashea con BCrypt.
-
-- Si preguntan por muchas peticiones:
-  El backend tiene rate limit por IP para login, reportes y API general.
-
-- Si preguntan por datos reales:
-  El sistema usa PostgreSQL en Railway y no depende de datos temporales del navegador para los reportes.
-
-- Si preguntan por IA:
-  La IA de imagen esta en un servicio independiente y el frontend solo consume su endpoint. La IA operativa del backend aplica reglas de asignacion y tiempos sobre la descripcion recibida.
-
-- Si preguntan por seguridad pendiente:
-  La autenticacion JWT esta lista de forma gradual. Para endurecer produccion se activa `SIGEU_AUTH_REQUIRE_TOKEN=true` despues de confirmar usuarios y despliegue.
-
-### Antes de presentar
-
-- Probar Vercel desde el celular.
-- Probar Railway con al menos un reporte nuevo.
-- Tener usuarios demo listos para ciudadano y entidades.
-- Tener una imagen de emergencia preparada.
-- No cambiar variables de entorno minutos antes de exponer.
+La gestion operativa se apoya en reglas del backend para asignar recursos, dejar reportes en espera si no hay disponibilidad, estimar tiempos segun el tipo de emergencia y liberar unidades cuando el caso se resuelve.
