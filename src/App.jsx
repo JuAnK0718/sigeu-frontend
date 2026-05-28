@@ -691,7 +691,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-2xl font-black italic leading-none">SIGEU</h1>
-                <p className="text-[10px] uppercase tracking-[.28em] text-cyan-200/80 font-bold">Sistema de Gestión</p>
+                <p className="text-[10px] uppercase tracking-[.16em] text-cyan-200/80 font-bold">Sistema de Gestión de Emergencias Urbanas</p>
               </div>
             </div>
             <div className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-200/85">
@@ -739,8 +739,13 @@ function App() {
             <div className="w-full max-w-md mx-auto bg-[#091120]/90 backdrop-blur-xl rounded-[2rem] p-7 md:p-9 z-10 animate-fade-in-up border border-white/10 shadow-2xl text-center shadow-black/50">
             <div className="bg-[#ff0000] w-14 h-14 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-[0_0_25px_rgba(255,0,0,0.5)]"><span className="text-4xl font-black italic text-white">!</span></div>
             <h1 className="text-5xl font-black italic mb-1 tracking-normal text-white">SIGEU</h1>
-            <p className="text-xs uppercase tracking-[.3em] opacity-80 mb-8 font-semibold text-cyan-200">
-              {view === 'LOGIN' ? 'Sistema de Gestión' : view === 'REGISTER' ? 'Nuevo Registro' : 'Recuperación'}
+            <p className="text-[10px] sm:text-xs uppercase tracking-[.18em] leading-relaxed opacity-80 mb-8 font-semibold text-cyan-200">
+              {view === 'LOGIN' ? (
+                <>
+                  <span>Sistema Inteligente de Gestión</span>
+                  <span className="block mt-1">de Emergencias Urbanas</span>
+                </>
+              ) : view === 'REGISTER' ? 'Nuevo Registro' : 'Recuperación'}
             </p>
 
             {authError && <div className="text-red-400 text-xs font-bold bg-red-950/40 p-3 rounded-xl border border-red-900 mb-4">{authError}</div>}
