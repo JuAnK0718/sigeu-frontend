@@ -43,6 +43,24 @@ Esta separacion permite mantener desacoplada la logica visual, la persistencia d
 - PostgreSQL en Railway
 - Servicio externo de IA para analisis de imagenes
 
+# SIGEU Frontend
+
+Interfaz web para reporte ciudadano de emergencias urbanas - Pasto.
+
+## Tecnologías
+- HTML5
+- CSS3
+- JavaScript Vanilla
+
+## Cómo usar
+Abrir index.html en el navegador o usar Live Server en VS Code.
+
+## Funcionalidades
+- Formulario de reporte de emergencias
+- Captura de ubicación GPS
+- Subida de imágenes
+- Clasificación automática por tipo de emergencia
+
 ## Estructura del frontend
 
 - `src/App.jsx`: composicion principal de vistas, estados y flujos de usuario.
