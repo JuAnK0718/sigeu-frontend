@@ -49,6 +49,11 @@ const RESOURCE_DEFAULTS = {
   BOMBEROS: { totalUnits: 8, unitName: 'camiones' },
 }
 
+const CITIZEN_REPORT_DRAFT_KEY = 'sigeu_citizen_report_draft'
+const DEFAULT_SELECTED_ENTITIES = ['POLICIA']
+const VALID_TARGET_ENTITIES = ['POLICIA', 'BOMBEROS', 'HOSPITAL']
+const EMPTY_EMERGENCY_FORM = { title: '', description: '', location: '', type: 'ACCIDENT', image: '' }
+
 const limitText = (value, maxLength) => {
   return (value || '').slice(0, maxLength)
 }
@@ -140,6 +145,59 @@ const buildReportDescription = (aiDescription, additionalDescription) => {
   return limitText(parts.join('\n\n'), FIELD_LIMITS.description)
 }
 
+const readCitizenReportDraft = () => {
+  try {
+    const storedDraft = localStorage.getItem(CITIZEN_REPORT_DRAFT_KEY)
+    if (!storedDraft) {
+      return {
+        emergencyForm: EMPTY_EMERGENCY_FORM,
+        aiDescription: '',
+        selectedEntities: DEFAULT_SELECTED_ENTITIES,
+      }
+    }
+
+    const draft = JSON.parse(storedDraft)
+    const emergencyForm = draft.emergencyForm || {}
+    const selectedEntities = Array.isArray(draft.selectedEntities)
+      ? draft.selectedEntities.filter(entity => VALID_TARGET_ENTITIES.includes(entity))
+      : DEFAULT_SELECTED_ENTITIES
+
+    return {
+      emergencyForm: {
+        title: limitText(emergencyForm.title, FIELD_LIMITS.title),
+        description: limitText(emergencyForm.description, FIELD_LIMITS.description),
+        location: limitText(emergencyForm.location, FIELD_LIMITS.location),
+        type: limitText(emergencyForm.type || 'ACCIDENT', 40),
+        image: '',
+      },
+      aiDescription: limitText(draft.aiDescription, FIELD_LIMITS.description),
+      selectedEntities: selectedEntities.length > 0 ? selectedEntities : DEFAULT_SELECTED_ENTITIES,
+    }
+  } catch {
+    localStorage.removeItem(CITIZEN_REPORT_DRAFT_KEY)
+    return {
+      emergencyForm: EMPTY_EMERGENCY_FORM,
+      aiDescription: '',
+      selectedEntities: DEFAULT_SELECTED_ENTITIES,
+    }
+  }
+}
+
+const hasCitizenReportDraftContent = (draft) => {
+  const form = draft.emergencyForm || {}
+  return Boolean(
+    form.title?.trim() ||
+    form.description?.trim() ||
+    form.location?.trim() ||
+    draft.aiDescription?.trim() ||
+    JSON.stringify(draft.selectedEntities || []) !== JSON.stringify(DEFAULT_SELECTED_ENTITIES)
+  )
+}
+
+const clearCitizenReportDraft = () => {
+  localStorage.removeItem(CITIZEN_REPORT_DRAFT_KEY)
+}
+
 function App() {
   const [user, setUser] = useState(() => {
     return SigeuUser.fromStorage(localStorage.getItem('sigeu_user'))
@@ -161,11 +219,10 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authSuccess, setAuthSuccess] = useState('')
   const [formErrors, setFormErrors] = useState({});
-  const [emergencyForm, setEmergencyForm] = useState({ 
-    title: '', description: '', location: '', type: 'ACCIDENT', image: '' 
-  })
-  const [aiDescription, setAiDescription] = useState('')
-  const [selectedEntities, setSelectedEntities] = useState(['POLICIA'])
+  const [initialReportDraft] = useState(readCitizenReportDraft)
+  const [emergencyForm, setEmergencyForm] = useState(initialReportDraft.emergencyForm)
+  const [aiDescription, setAiDescription] = useState(initialReportDraft.aiDescription)
+  const [selectedEntities, setSelectedEntities] = useState(initialReportDraft.selectedEntities)
   const [citizenMode, setCitizenMode] = useState(() => localStorage.getItem('sigeu_citizen_mode') || 'light')
   const [citizenPanel, setCitizenPanel] = useState('REPORT')
 
@@ -231,6 +288,28 @@ function App() {
       localStorage.setItem('sigeu_user', JSON.stringify(user))
     }
   }, [user])
+
+  useEffect(() => {
+    if (view !== 'DASHBOARD' || user?.role !== 'CITIZEN') return
+
+    const draft = {
+      emergencyForm: {
+        title: emergencyForm.title,
+        description: emergencyForm.description,
+        location: emergencyForm.location,
+        type: emergencyForm.type,
+        image: '',
+      },
+      aiDescription,
+      selectedEntities,
+    }
+
+    if (hasCitizenReportDraftContent(draft)) {
+      localStorage.setItem(CITIZEN_REPORT_DRAFT_KEY, JSON.stringify(draft))
+    } else {
+      clearCitizenReportDraft()
+    }
+  }, [view, user?.role, emergencyForm, aiDescription, selectedEntities])
 
   useEffect(() => {
     let intervalId;
@@ -434,7 +513,8 @@ function App() {
           : `Reporte enviado a ${successfulDeliveries} de ${selectedEntities.length}. Fallo: ${failedDeliveries.join(' | ')}`,
         allSent ? 'success' : 'warning'
       );
-      setEmergencyForm({ title: '', description: '', location: '', type: 'ACCIDENT', image: '' }); setSelectedEntities(['POLICIA']); setImagePreview(null)
+      clearCitizenReportDraft()
+      setEmergencyForm({ ...EMPTY_EMERGENCY_FORM }); setSelectedEntities(DEFAULT_SELECTED_ENTITIES); setImagePreview(null)
       setAiDescription('')
       if (createdReports.length > 0) {
         setCitizenReports(current => [...createdReports, ...current].filter((item, index, all) => all.findIndex(other => other.id === item.id) === index))
