@@ -84,34 +84,6 @@ export class EmergencyReport {
     return this.status === filterId;
   }
 
-  withStatus(status) {
-    return new EmergencyReport({ ...this.toJSON(), status }, this.viewerRole);
-  }
-
-  toJSON() {
-    return {
-      id: this.id,
-      title: this.title,
-      description: this.description,
-      location: this.location,
-      type: this.type,
-      status: this.status,
-      targetEntity: this.targetEntity,
-      reporterUsername: this.reporterUsername,
-      assignedOperatorUsername: this.assignedOperatorUsername,
-      image: this.image,
-      createdAt: this.createdAt,
-      assignedUnits: this.assignedUnits,
-      resourceLabel: this.resourceLabel,
-      estimatedResolveMinutes: this.estimatedResolveMinutes,
-      operationalNote: this.operationalNote,
-      autoStartedAt: this.autoStartedAt,
-      autoResolveAt: this.autoResolveAt,
-      autoDeleteAt: this.autoDeleteAt,
-      resolvedAt: this.resolvedAt,
-      deleteReason: this.deleteReason,
-    };
-  }
 }
 
 export class EmergencyDashboard {

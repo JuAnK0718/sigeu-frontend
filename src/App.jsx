@@ -215,8 +215,8 @@ function App() {
             const resources = await resourcesRes.json();
             setResourceSummary(resources);
           }
-        } catch (error) {
-          console.error(error);
+        } catch {
+          // Polling silencioso: evita ruido en consola si la red cae por un momento.
         }
       };
       fetchEmergencies();
@@ -235,8 +235,8 @@ function App() {
           if (res.ok) {
             setCitizenReports(await res.json())
           }
-        } catch (error) {
-          console.error(error)
+        } catch {
+          // Polling silencioso: el siguiente ciclo vuelve a intentar.
         } finally {
           setIsLoadingCitizenReports(false)
         }
@@ -386,8 +386,7 @@ function App() {
           failedDeliveries.push(`${entidad}: ${errorText || `error ${res.status}`}`);
         }
       }
-    } catch (error) {
-      console.error(error);
+    } catch {
       showAppNotice('No se pudo conectar con el backend. Revisa que Railway o el backend local esten activos.', 'error');
       return;
     } finally {
