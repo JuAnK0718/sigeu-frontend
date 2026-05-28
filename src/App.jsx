@@ -167,6 +167,7 @@ function App() {
   const [aiDescription, setAiDescription] = useState('')
   const [selectedEntities, setSelectedEntities] = useState(['POLICIA'])
   const [citizenMode, setCitizenMode] = useState(() => localStorage.getItem('sigeu_citizen_mode') || 'light')
+  const [citizenPanel, setCitizenPanel] = useState('REPORT')
 
   const [isLocating, setIsLocating] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -438,6 +439,7 @@ function App() {
       if (createdReports.length > 0) {
         setCitizenReports(current => [...createdReports, ...current].filter((item, index, all) => all.findIndex(other => other.id === item.id) === index))
       }
+      setCitizenPanel('TRACKING')
     } else {
       showAppNotice(`No se pudo enviar el reporte. ${failedDeliveries.join(' | ') || 'El backend no respondio.'}`, 'error');
     }
@@ -454,6 +456,7 @@ function App() {
     setAiDescription('Analisis de IA:\nEscena demo: accidente vial con posible bloqueo de via.\nRiesgos: posibles heridos y trafico detenido.\nGravedad: Alta por riesgo para peatones y vehiculos.\nEntidades: POLICIA, HOSPITAL.')
     setSelectedEntities(['POLICIA', 'HOSPITAL'])
     setImagePreview(null)
+    setCitizenPanel('REPORT')
     showAppNotice('Reporte demo cargado. Puedes revisarlo y enviarlo cuando quieras.', 'success')
   }
 
@@ -992,6 +995,10 @@ function App() {
   const importantDescriptionClass = isCitizenDark ? 'font-black text-cyan-200' : 'font-black text-slate-950';
   const citizenDashboard = new EmergencyDashboard(citizenReports, user?.role);
   const citizenStats = citizenDashboard.stats;
+  const citizenPanelOptions = [
+    { id: 'REPORT', label: 'Reportar', detail: 'Crear alerta', count: selectedEntities.length, icon: <Radio size={18}/> },
+    { id: 'TRACKING', label: 'Mis reportes', detail: 'Seguimiento', count: citizenStats.total, icon: <History size={18}/> },
+  ];
   const dashboard = new EmergencyDashboard(emergencies, user?.role);
   const entityStats = dashboard.stats;
   const entityReports = dashboard.filter(entitySearch, entityFilter);
@@ -1080,11 +1087,11 @@ function App() {
               <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase text-cyan-100">
-                    <Activity size={13} className="text-red-300"/> Reporte ciudadano
+                    <Activity size={13} className="text-red-300"/> {citizenPanel === 'REPORT' ? 'Reporte ciudadano' : 'Seguimiento ciudadano'}
                   </span>
-                  <h3 className="mt-4 text-3xl font-black italic tracking-normal md:text-4xl">Emitir Alerta</h3>
+                  <h3 className="mt-4 text-3xl font-black italic tracking-normal md:text-4xl">{citizenPanel === 'REPORT' ? 'Emitir Alerta' : 'Mis Reportes'}</h3>
                   <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-300">
-                    Registra la escena con ubicación, evidencia y entidades de respuesta en un solo envío.
+                    {citizenPanel === 'REPORT' ? 'Registra la escena con ubicación, evidencia y entidades de respuesta en un solo envío.' : 'Consulta el estado de tus alertas enviadas y revisa el seguimiento de cada caso.'}
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -1103,6 +1110,32 @@ function App() {
                 </div>
               </div>
             </div>
+            <section className={["border-b p-3 md:p-4", isCitizenDark ? "border-slate-800 bg-slate-950/80" : "border-slate-200 bg-white"].join(" ")}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {citizenPanelOptions.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setCitizenPanel(option.id)}
+                    className={["flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all", citizenPanel === option.id ? (isCitizenDark ? "border-cyan-500/40 bg-cyan-950/70 text-white shadow-lg shadow-cyan-950/20" : "border-blue-200 bg-blue-600 text-white shadow-lg shadow-blue-100") : (isCitizenDark ? "border-slate-700 bg-slate-900 text-slate-300 hover:border-cyan-800" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-white")].join(" ")}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className={["flex h-10 w-10 items-center justify-center rounded-xl", citizenPanel === option.id ? "bg-white/15 text-white" : (isCitizenDark ? "bg-slate-950 text-slate-400" : "bg-white text-slate-500")].join(" ")}>
+                        {option.icon}
+                      </span>
+                      <span>
+                        <span className="block text-sm font-black uppercase">{option.label}</span>
+                        <span className="block text-[10px] font-bold uppercase opacity-70">{option.detail}</span>
+                      </span>
+                    </span>
+                    <span className={["rounded-full px-2.5 py-1 text-xs font-black", citizenPanel === option.id ? "bg-white/15 text-white" : (isCitizenDark ? "bg-slate-950 text-slate-300" : "bg-white text-slate-900")].join(" ")}>
+                      {option.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            {citizenPanel === 'REPORT' && (
             <form onSubmit={handleSend} className={["grid gap-6 p-5 md:p-8 lg:p-10 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,.8fr)]", isCitizenDark ? "bg-slate-950/70" : "bg-slate-50/80"].join(" ")}>
               <div className="space-y-6">
               <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
@@ -1207,6 +1240,8 @@ function App() {
                 </div>
               </div>
             </form>
+            )}
+            {citizenPanel === 'TRACKING' && (
             <section className={["border-t p-5 md:p-8 lg:p-10", isCitizenDark ? "border-slate-800 bg-slate-950/80" : "border-slate-200 bg-white"].join(" ")}>
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
@@ -1265,6 +1300,7 @@ function App() {
                 </div>
               )}
             </section>
+            )}
           </div>
         ) : (
           <>
