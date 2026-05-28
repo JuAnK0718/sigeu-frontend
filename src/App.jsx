@@ -74,6 +74,39 @@ const buildOperationalAiDescription = (text) => {
   return `${cleanText}\n\n${criterion}`
 }
 
+const normalizeAiText = (text) => {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+}
+
+const extractRecommendedEntities = (text) => {
+  const normalizedText = normalizeAiText(text)
+  const lines = normalizedText.split(/\r?\n/)
+  const entitiesLine = lines.find(line => /^\s*ENTIDADES?(\s+RECOMENDADAS)?\s*:/.test(line))
+  const sourceText = entitiesLine || normalizedText
+
+  if (sourceText.includes('NINGUNA EMERGENCIA') || sourceText.includes('NINGUNA')) return []
+
+  const recommended = []
+  if (sourceText.includes('POLICIA')) recommended.push('POLICIA')
+  if (sourceText.includes('BOMBERO')) recommended.push('BOMBEROS')
+  if (sourceText.includes('HOSPITAL')) recommended.push('HOSPITAL')
+
+  if (entitiesLine) return recommended
+
+  const deniesFireRisk = /NO\s+SE\s+(OBSERVA|OBSERVAN|APRECIA|APRECIAN)[^\n]*(FUEGO|HUMO|INCENDIO|LLAMAS)/.test(normalizedText)
+  if (!deniesFireRisk && /(FUEGO|INCENDIO|LLAMAS|HUMO)/.test(normalizedText)) {
+    recommended.push('BOMBEROS')
+  }
+  if (/(AMBULANCIA|MEDICO|HERIDO|INCONSCIENTE|SIN RESPUESTA)/.test(normalizedText)) {
+    recommended.push('HOSPITAL')
+  }
+
+  return [...new Set(recommended)]
+}
+
 const IMPORTANT_TEXT_SPLIT = /(Analisis de IA:|POLIC[ÍI]A|BOMBEROS?|HOSPITAL|AMBULANCIA|HERID[OA]S?|FUEGO|INCENDIO|LLAMAS|INMEDIATO|URGENTE|EMERGENCIA|RESCATE|ACCIDENTE|VIOLENCIA|PELIGRO|RIESGO)/gi
 const IMPORTANT_TEXT_MATCH = /^(Analisis de IA:|POLIC[ÍI]A|BOMBEROS?|HOSPITAL|AMBULANCIA|HERID[OA]S?|FUEGO|INCENDIO|LLAMAS|INMEDIATO|URGENTE|EMERGENCIA|RESCATE|ACCIDENTE|VIOLENCIA|PELIGRO|RIESGO)$/i
 
@@ -636,19 +669,14 @@ function App() {
         const textoIA = data.descripcion || 'La IA no devolvió una descripción clara.';
         const textoOperativo = buildOperationalAiDescription(textoIA);
         setAiDescription(limitText(`Analisis de IA:\n${textoOperativo}`, FIELD_LIMITS.description));
-        const textoMayusculas = textoIA.toUpperCase();
-        if (textoMayusculas.includes('NO ES NECESARIA') || textoMayusculas.includes('NINGUNA EMERGENCIA')) {
+        const textoNormalizado = normalizeAiText(textoIA);
+        const recomendadas = extractRecommendedEntities(textoIA);
+        if (textoNormalizado.includes('NO ES NECESARIA') || textoNormalizado.includes('NINGUNA EMERGENCIA')) {
           setSelectedEntities([]);
+        } else if (recomendadas.length > 0) {
+          setSelectedEntities(recomendadas);
         } else {
-          const recomendadas = [];
-          if (textoMayusculas.includes('POLICÍA') || textoMayusculas.includes('POLICIA')) recomendadas.push('POLICIA');
-          if (textoMayusculas.includes('BOMBERO') || textoMayusculas.includes('FUEGO') || textoMayusculas.includes('INCENDIO')) recomendadas.push('BOMBEROS');
-          if (textoMayusculas.includes('HOSPITAL') || textoMayusculas.includes('AMBULANCIA') || textoMayusculas.includes('MÉDICO') || textoMayusculas.includes('HERIDO')) recomendadas.push('HOSPITAL');
-          if (recomendadas.length > 0) {
-            setSelectedEntities(recomendadas);
-          } else {
-            showAppNotice('La IA no identificó una entidad específica. Revisa la selección manualmente.', 'warning');
-          }
+          showAppNotice('La IA no identificó una entidad específica. Revisa la selección manualmente.', 'warning');
         }
       } catch {
         setAiDescription('');
